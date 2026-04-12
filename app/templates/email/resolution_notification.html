@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .content {
+            padding: 30px;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            color: #56ab2f;
+            font-size: 18px;
+            margin-top: 0;
+            border-bottom: 2px solid #56ab2f;
+            padding-bottom: 10px;
+        }
+        .detail {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .detail-value {
+            color: #333;
+            text-align: right;
+            flex: 1;
+            margin-left: 20px;
+        }
+        .ref-id {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-left: 4px solid #56ab2f;
+            margin: 20px 0;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        .footer {
+            background-color: #f9f9f9;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #888;
+            border-top: 1px solid #eee;
+        }
+        .success-badge {
+            background-color: #c8e6c9;
+            color: #2e7d32;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+            margin: 20px 0;
+            font-size: 16px;
+        }
+        .stats {
+            background-color: #f1f8e9;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{ bot_name }}</h1>
+            <p>Complaint Resolution Complete</p>
+        </div>
+        
+        <div class="content">
+            <p>Dear Citizen,</p>
+            
+            <p>Good news! Your complaint has been marked as completed by the authority. Please review the details below.</p>
+
+            <div class="ref-id">
+                Reference ID: {{ complaint_id[:16] }}
+            </div>
+
+            <div class="success-badge">
+                ✓ Status: {{ status }}
+            </div>
+
+            <div class="section">
+                <h2>Complaint Details</h2>
+                <div class="detail">
+                    <span class="detail-label">Category:</span>
+                    <span class="detail-value">{{ category }}</span>
+                </div>
+                <div class="detail">
+                    <span class="detail-label">Location (Thana):</span>
+                    <span class="detail-value">{{ thana }}</span>
+                </div>
+                <div class="detail">
+                    <span class="detail-label">Submitted:</span>
+                    <span class="detail-value">{{ created_at }}</span>
+                </div>
+                <div class="detail">
+                    <span class="detail-label">Completed:</span>
+                    <span class="detail-value">{{ completed_at }}</span>
+                </div>
+            </div>
+
+            <div class="stats">
+                <div class="stat-row">
+                    <span style="font-weight: bold;">Resolution Time:</span>
+                    <span>{{ resolution_hours }} hours</span>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Next Step - Please Confirm</h2>
+                <p>You will receive a separate confirmation request email. Please review the resolution and confirm whether you are satisfied with the action taken.</p>
+                <ul>
+                    <li><strong>Confirm:</strong> If the issue has been resolved to your satisfaction</li>
+                    <li><strong>Reject:</strong> If you believe the issue needs further attention</li>
+                </ul>
+            </div>
+
+            <p style="color: #666; font-size: 14px;">Thank you for bringing this matter to our attention. Your feedback helps us improve our services.</p>
+        </div>
+
+        <div class="footer">
+            <p>This is an automated email from {{ bot_name }}</p>
+            <p>&copy; 2026 Dhaka City Operations. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

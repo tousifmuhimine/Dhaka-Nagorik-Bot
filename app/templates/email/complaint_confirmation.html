@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .content {
+            padding: 30px;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            color: #667eea;
+            font-size: 18px;
+            margin-top: 0;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .detail {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .detail-value {
+            color: #333;
+        }
+        .ref-id {
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-left: 4px solid #667eea;
+            margin: 20px 0;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        .footer {
+            background-color: #f9f9f9;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #888;
+            border-top: 1px solid #eee;
+        }
+        .button {
+            display: inline-block;
+            background-color: #667eea;
+            color: white;
+            padding: 12px 30px;
+            border-radius: 5px;
+            text-decoration: none;
+            margin-top: 15px;
+            font-weight: bold;
+        }
+        .urgency-critical {
+            background-color: #ffebee;
+            color: #c62828;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .urgency-high {
+            background-color: #fff3e0;
+            color: #e65100;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .urgency-medium {
+            background-color: #f1f8e9;
+            color: #558b2f;
+            padding: 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{ bot_name }}</h1>
+            <p>Complaint Received Successfully</p>
+        </div>
+        
+        <div class="content">
+            <p>Dear Citizen,</p>
+            
+            <p>Thank you for submitting your complaint to {{ bot_name }}. We have successfully received and registered your complaint.</p>
+
+            <div class="ref-id">
+                Reference ID: {{ complaint_id[:16] }}
+            </div>
+
+            <div class="section">
+                <h2>Complaint Details</h2>
+                <div class="detail">
+                    <span class="detail-label">Summary:</span>
+                    <span class="detail-value">{{ complaint_summary[:50] }}...</span>
+                </div>
+                <div class="detail">
+                    <span class="detail-label">Category:</span>
+                    <span class="detail-value">{{ category }}</span>
+                </div>
+                <div class="detail">
+                    <span class="detail-label">Location (Thana):</span>
+                    <span class="detail-value">{{ thana }}</span>
+                </div>
+                <div class="detail">
+                    <span class="detail-label">Submitted:</span>
+                    <span class="detail-value">{{ created_at }}</span>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Priority Level</h2>
+                {% if urgency == "Critical" %}
+                    <div class="urgency-critical">{{ urgency }} - Will be processed with highest priority</div>
+                {% elif urgency == "High" %}
+                    <div class="urgency-high">{{ urgency }} - Will be processed soon</div>
+                {% else %}
+                    <div class="urgency-medium">{{ urgency }} - Standard processing</div>
+                {% endif %}
+            </div>
+
+            <div class="section">
+                <p>Your complaint has been assigned to the relevant authority. You will receive updates as your complaint progresses through the resolution process.</p>
+                <p style="color: #888; font-size: 14px;">Expected timeline: 5-7 business days for assessment</p>
+            </div>
+
+            <p style="color: #666; font-size: 14px;">Please keep your reference ID safe for future correspondence.</p>
+        </div>
+
+        <div class="footer">
+            <p>This is an automated email from {{ bot_name }}</p>
+            <p>&copy; 2026 Dhaka City Operations. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

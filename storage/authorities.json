@@ -1,0 +1,12 @@
+[
+  {
+    "id": "authority-001",
+    "user_id": "authority-demo",
+    "assigned_thana": "Dhanmondi"
+  },
+  {
+    "id": "authority-002",
+    "user_id": "authority-demo-2",
+    "assigned_thana": "Gulshan"
+  }
+]

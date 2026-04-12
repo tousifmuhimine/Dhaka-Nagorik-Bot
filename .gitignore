@@ -1,0 +1,11 @@
+*.md
+**/*.md
+!README.md
+!**/README.md
+
+.env
+
+__pycache__/
+**/__pycache__/
+
+supabase
