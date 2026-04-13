@@ -1,0 +1,79 @@
+{% extends 'complaints/base.html' %}
+
+{% block title %}Admin Dashboard - Dhaka Civic Complaints{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-4 gap-4 mb-8">
+    <div class="bg-white p-6 rounded-lg shadow">
+        <div class="text-gray-600 text-sm">Total Complaints</div>
+        <div class="text-3xl font-bold text-blue-600">{{ total_complaints }}</div>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <div class="text-gray-600 text-sm">Resolved</div>
+        <div class="text-3xl font-bold text-green-600">{{ resolved }}</div>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <div class="text-gray-600 text-sm">Pending</div>
+        <div class="text-3xl font-bold text-orange-600">{{ pending }}</div>
+    </div>
+    <div class="bg-white p-6 rounded-lg shadow">
+        <div class="text-gray-600 text-sm">Total Users</div>
+        <div class="text-3xl font-bold text-purple-600">{{ total_users }}</div>
+    </div>
+</div>
+
+<div class="bg-white p-8 rounded-lg shadow">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold">All Complaints</h2>
+        <div class="flex gap-2">
+            <input type="text" placeholder="Search..." class="px-4 py-2 border rounded-lg" />
+            <select class="px-4 py-2 border rounded-lg">
+                <option value="">All Status</option>
+                <option value="submitted">Submitted</option>
+                <option value="under_review">Under Review</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+            </select>
+        </div>
+    </div>
+
+    {% if complaints %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b">
+                <tr>
+                    <th class="px-4 py-2 text-left">ID</th>
+                    <th class="px-4 py-2 text-left">Citizen</th>
+                    <th class="px-4 py-2 text-left">Category</th>
+                    <th class="px-4 py-2 text-left">Thana</th>
+                    <th class="px-4 py-2 text-left">Status</th>
+                    <th class="px-4 py-2 text-left">Created</th>
+                    <th class="px-4 py-2 text-left">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for complaint in complaints %}
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="px-4 py-2">#{{ complaint.id }}</td>
+                    <td class="px-4 py-2">{{ complaint.citizen.first_name }}</td>
+                    <td class="px-4 py-2">{{ complaint.category|title }}</td>
+                    <td class="px-4 py-2">{{ complaint.thana }}</td>
+                    <td class="px-4 py-2">
+                        <span class="px-2 py-1 text-xs rounded-full font-medium {% if complaint.status == 'resolved' %}bg-green-100 text-green-800{% elif complaint.status == 'in_progress' %}bg-blue-100 text-blue-800{% else %}bg-orange-100 text-orange-800{% endif %}">
+                            {{ complaint.status|title }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-2 text-xs">{{ complaint.created_at|date:"M d, Y" }}</td>
+                    <td class="px-4 py-2">
+                        <a href="{% url 'complaint_detail' complaint.id %}" class="text-blue-600 hover:underline">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-gray-600 text-center py-8">No complaints found.</p>
+    {% endif %}
+</div>
+{% endblock %}

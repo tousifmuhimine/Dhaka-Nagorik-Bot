@@ -1,53 +1,123 @@
-# Dhaka Nagorik Bot
+# Dhaka Civic Complaints System
 
-Dhaka Nagorik Bot is a full-stack AI civic complaint automation scaffold for Dhaka city operations. It combines FastAPI, Flet, Groq-powered extraction, PDF-based policy retrieval, lifecycle timestamp tracking, document generation, and dashboard analytics.
+A professional Django web application for managing civic complaints in Dhaka. Citizens can file complaints, track status, and authorities can manage and respond to complaints.
 
-## What is included
+## 🚀 Quick Start
 
-- Multi-role flow for citizen, authority, and admin
-- FastAPI endpoints for complaint lifecycle updates
-- AI complaint extraction with Bangla and English support
-- RAG policy review from the project PDFs `DNCC.pdf` and `dscc.pdf`
-- Explicit lifecycle timestamps plus delayed-complaint tracking
-- Generated PDF and DOCX submission documents
-- Authority and admin dashboard building blocks
-- Local JSON demo storage plus Supabase-ready REST integration
+### Prerequisites
+- Python 3.9+
+- Virtual environment activated (`.venv/`)
 
-## Project Structure
+### Installation
 
-```text
-app/
-  api/
-  core/
-  db/
-  models/
-  schemas/
-  services/
-  ui/
-docs/
-supabase/
-main.py
-flet_app.py
-requirements.txt
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Apply database migrations
+python manage.py migrate
+
+# Create test users (optional)
+python setup_users.py
+
+# Start development server
+python manage.py runserver
 ```
 
-## Key API Functions
+Visit: **http://127.0.0.1:8000/**
 
-- `create_complaint()`
-- `acknowledge_complaint()`
-- `mark_in_progress()`
-- `mark_done()`
-- `confirm_resolution()`
+### Test Accounts
 
-These are implemented inside `ComplaintService` and exposed through FastAPI routes.
+| Email | Password | Role |
+|-------|----------|------|
+| `admin@dhaka.gov` | `Admin@1234` | Admin |
+| `citizen@example.com` | `Citizen@1234` | Citizen |
+| `authority@dhaka.gov` | `Authority@1234` | Authority |
 
-## Run locally
+## 📁 Project Structure
 
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn main:app --reload
+```
+Dhaka Nagorik Bot/
+├── manage.py                 # Django management script
+├── db.sqlite3               # SQLite database
+├── requirements.txt         # Python dependencies
+│
+├── dhaka_web/               # Django project settings
+│   ├── settings.py          # Configuration
+│   ├── urls.py              # URL routing
+│   └── wsgi.py              # Production WSGI
+│
+├── complaints/              # Main Django app
+│   ├── models.py            # Database models
+│   ├── views.py             # Business logic
+│   ├── forms.py             # Form validation
+│   ├── urls.py              # App URLs
+│   ├── admin.py             # Admin interface
+│   └── migrations/          # Database history
+│
+├── templates/               # HTML templates (TailwindCSS)
+│   └── complaints/
+│       ├── base.html
+│       ├── login.html
+│       ├── signup.html
+│       ├── citizen_dashboard.html
+│       ├── authority_dashboard.html
+│       ├── admin_dashboard.html
+│       └── complaint_detail.html
+│
+└── static/                  # CSS, JavaScript, images
+```
+
+## 🔐 Features
+
+### Citizen
+- File new complaints
+- Track complaint status
+- View history
+- Communicate with authorities
+
+### Authority
+- Thana-specific dashboard
+- Respond to complaints
+- Update status
+- Filter by category/status
+
+### Admin
+- System-wide overview
+- Search and filter
+- User management
+- Statistics
+
+## 🛠 Development
+
+```bash
+# Run server
+python manage.py runserver
+
+# Create admin user
+python manage.py createsuperuser
+
+# Create/apply migrations
+python manage.py makemigrations
+python manage.py migrate
+
+# Access admin
+# http://127.0.0.1:8000/admin/
+```
+
+## 📦 Technologies
+
+- **Backend**: Django 6.0.4 (Python)
+- **Frontend**: Django Templates + TailwindCSS
+- **Database**: SQLite (dev) / PostgreSQL (production)
+- **Auth**: Django built-in authentication
+
+## 🚢 Production
+
+Set `DEBUG = False` in settings and deploy with Gunicorn + Nginx.
+
+See COMMANDS.md for more commands.
+
 python flet_app.py
 ```
 

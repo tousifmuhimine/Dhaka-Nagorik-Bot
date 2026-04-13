@@ -1,11 +1,63 @@
-*.md
-**/*.md
-!README.md
-!**/README.md
-
-.env
-
+# Python
 __pycache__/
-**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+env.bak
+venv.bak
+*.egg-info/
+dist/
+build/
 
-supabase
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+/media
+/staticfiles
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Archive folder (old project files)
+_archive/
+
+# Test & Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Old docs (deprecated)
+PHASE_*.md
+UPGRADE_*.md
+IMPLEMENTATION_*.md
+GAP_*.md
+README_DJANGO.md

@@ -1,0 +1,78 @@
+{% extends 'complaints/base.html' %}
+
+{% block title %}Complaint Details - Dhaka Civic Complaints{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-lg shadow p-8">
+        <h1 class="text-3xl font-bold mb-6">Complaint #{{ complaint.id }}</h1>
+        
+        <div class="grid grid-cols-2 gap-4 mb-8 pb-8 border-b">
+            <div>
+                <div class="text-gray-600 text-sm">Category</div>
+                <div class="font-bold">{{ complaint.category|title }}</div>
+            </div>
+            <div>
+                <div class="text-gray-600 text-sm">Status</div>
+                <span class="px-3 py-1 rounded-full text-sm font-medium {% if complaint.status == 'resolved' %}bg-green-100 text-green-800{% elif complaint.status == 'in_progress' %}bg-blue-100 text-blue-800{% else %}bg-orange-100 text-orange-800{% endif %}">
+                    {{ complaint.status|title }}
+                </span>
+            </div>
+            <div>
+                <div class="text-gray-600 text-sm">Thana</div>
+                <div class="font-bold">{{ complaint.thana }}</div>
+            </div>
+            <div>
+                <div class="text-gray-600 text-sm">Area</div>
+                <div class="font-bold">{{ complaint.area }}</div>
+            </div>
+        </div>
+
+        <div class="mb-8">
+            <h2 class="text-xl font-bold mb-4">Description</h2>
+            <p class="text-gray-700">{{ complaint.description }}</p>
+        </div>
+
+        <div>
+            <h2 class="text-xl font-bold mb-4">Updates</h2>
+            {% if updates %}
+            <div class="space-y-4">
+                {% for update in updates %}
+                <div class="bg-gray-50 p-4 rounded-lg border-l-4 border-blue-600">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="font-medium">{{ update.updated_by.first_name }}</div>
+                            <div class="text-sm text-gray-600 mt-1">{{ update.message }}</div>
+                        </div>
+                        <div class="text-xs text-gray-500">{{ update.created_at|date:"M d, Y H:i" }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-gray-600">No updates yet.</p>
+            {% endif %}
+        </div>
+
+        {% if can_update %}
+        <div class="mt-8 pt-8 border-t">
+            <h2 class="text-xl font-bold mb-4">Add Update</h2>
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+                <div>
+                    <label class="block text-sm font-medium mb-2">Message</label>
+                    {{ form.message }}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Change Status</label>
+                    {{ form.status_change }}
+                </div>
+                <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
+                    Submit Update
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

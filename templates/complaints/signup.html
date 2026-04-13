@@ -1,0 +1,68 @@
+{% extends 'complaints/base.html' %}
+
+{% block title %}Sign Up - Dhaka Civic Complaints{% endblock %}
+
+{% block main_class %}flex items-center justify-center min-h-screen bg-gradient-to-br from-green-600 to-green-800{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-md">
+    <div class="bg-white rounded-lg shadow-lg p-8">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-green-600 mb-2">
+                <i class="fas fa-user-plus"></i> Create Account
+            </h1>
+            <p class="text-gray-600">Join as a citizen to file complaints</p>
+        </div>
+
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+            
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                {{ form.first_name }}
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                {{ form.email }}
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                {{ form.password1 }}
+                <p class="text-xs text-gray-500 mt-1">At least 8 characters</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
+                {{ form.password2 }}
+            </div>
+
+            <button type="submit" class="w-full bg-green-600 text-white font-medium py-2 rounded-lg hover:bg-green-700 transition">
+                <i class="fas fa-user-plus"></i> Create Account
+            </button>
+        </form>
+
+        <div class="mt-6 pt-6 border-t text-center">
+            <p class="text-gray-600">
+                Already have an account? 
+                <a href="{% url 'login' %}" class="text-green-600 font-medium hover:underline">
+                    Login here
+                </a>
+            </p>
+        </div>
+
+        {% if form.errors %}
+        <div class="mt-4 p-4 bg-red-100 text-red-800 rounded-lg">
+            <ul>
+                {% for field, errors in form.errors.items %}
+                    {% for error in errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
