@@ -1,455 +1,649 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Complaint Assistant - Chat</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+{% extends 'complaints/base.html' %}
+
+{% block title %}Complaint Assistant{% endblock %}
+
+{% block main_class %}max-w-none px-0 py-0{% endblock %}
+
+{% block content %}
+<style>
+    .chat-shell {
+        min-height: calc(100vh - 220px);
+        background:
+            radial-gradient(circle at top left, rgba(25, 118, 210, 0.08), transparent 28%),
+            linear-gradient(180deg, #f4f8fc 0%, #eef3f8 100%);
+        padding: 24px;
+    }
+
+    .chat-layout {
+        display: grid;
+        grid-template-columns: 300px minmax(0, 1fr) 320px;
+        gap: 18px;
+        min-height: calc(100vh - 268px);
+    }
+
+    .chat-card {
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 24px;
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+        backdrop-filter: blur(12px);
+    }
+
+    .sidebar-panel,
+    .insight-panel {
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+    }
+
+    .user-panel {
+        background: linear-gradient(135deg, #0f4c81 0%, #1976d2 100%);
+        color: #fff;
+        padding: 18px;
+        border-radius: 20px;
+    }
+
+    .user-avatar {
+        width: 52px;
+        height: 52px;
+        border-radius: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.18);
+        font-size: 20px;
+        font-weight: 700;
+        margin-bottom: 14px;
+    }
+
+    .user-name {
+        font-size: 1rem;
+        font-weight: 700;
+        margin: 0 0 4px;
+    }
+
+    .user-role {
+        margin: 0;
+        font-size: 0.9rem;
+        color: rgba(255, 255, 255, 0.82);
+    }
+
+    .panel-title {
+        margin: 0;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #5f6b7a;
+    }
+
+    .panel-subtitle {
+        margin: 4px 0 0;
+        color: #475569;
+        font-size: 0.95rem;
+        line-height: 1.5;
+    }
+
+    .action-grid {
+        display: grid;
+        gap: 10px;
+    }
+
+    .action-btn,
+    .session-btn {
+        border: 1px solid #d7e0ea;
+        border-radius: 16px;
+        background: #fff;
+        color: #0f172a;
+        cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .action-btn {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px;
+        font-weight: 600;
+    }
+
+    .action-btn:hover,
+    .session-btn:hover {
+        transform: translateY(-1px);
+        border-color: #8fc0ef;
+        box-shadow: 0 12px 24px rgba(25, 118, 210, 0.12);
+    }
+
+    .session-list {
+        display: grid;
+        gap: 10px;
+    }
+
+    .session-btn {
+        padding: 12px 14px;
+        text-align: left;
+    }
+
+    .session-btn strong,
+    .session-btn span {
+        display: block;
+    }
+
+    .session-btn strong {
+        font-size: 0.92rem;
+        margin-bottom: 4px;
+    }
+
+    .session-btn span {
+        font-size: 0.82rem;
+        color: #64748b;
+    }
+
+    .session-btn.active {
+        border-color: #1976d2;
+        background: #eef6ff;
+    }
+
+    .chat-panel {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .chat-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 22px 24px 18px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .chat-heading {
+        margin: 0;
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .chat-status {
+        margin: 6px 0 0;
+        color: #64748b;
+        font-size: 0.92rem;
+    }
+
+    .status-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 14px;
+        border-radius: 999px;
+        background: #e8f4ff;
+        color: #0f4c81;
+        font-size: 0.84rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .secondary-btn {
+        border: 1px solid #c7d6e6;
+        background: #fff;
+        color: #0f4c81;
+        border-radius: 999px;
+        padding: 10px 16px;
+        font-size: 0.88rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .secondary-btn:hover {
+        transform: translateY(-1px);
+        border-color: #8fc0ef;
+        box-shadow: 0 10px 20px rgba(25, 118, 210, 0.12);
+    }
+
+    .secondary-btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.65;
+        transform: none;
+        box-shadow: none;
+    }
+
+    .messages-area {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        background:
+            linear-gradient(180deg, rgba(248, 250, 252, 0.92) 0%, rgba(255, 255, 255, 0.96) 100%);
+    }
+
+    .welcome-card {
+        background: linear-gradient(135deg, #f7fbff 0%, #eef6ff 100%);
+        border: 1px solid #d7e7f7;
+        border-radius: 18px;
+        padding: 18px;
+        color: #1e293b;
+    }
+
+    .welcome-card h3 {
+        margin: 0 0 8px;
+        font-size: 1.05rem;
+        font-weight: 700;
+    }
+
+    .welcome-card p {
+        margin: 0;
+        color: #475569;
+        line-height: 1.6;
+    }
+
+    .message-row {
+        display: flex;
+        width: 100%;
+    }
+
+    .message-row.user {
+        justify-content: flex-end;
+    }
+
+    .message-row.assistant {
+        justify-content: flex-start;
+    }
+
+    .message-stack {
+        max-width: min(78%, 700px);
+    }
+
+    .message-meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 6px;
+        font-size: 0.8rem;
+        color: #64748b;
+    }
+
+    .message-row.user .message-meta {
+        justify-content: flex-end;
+    }
+
+    .message-bubble {
+        padding: 14px 16px;
+        border-radius: 18px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+    }
+
+    .message-bubble.user {
+        background: linear-gradient(135deg, #1976d2 0%, #0f4c81 100%);
+        color: #fff;
+        border-bottom-right-radius: 6px;
+    }
+
+    .message-bubble.assistant {
+        background: #fff;
+        color: #1e293b;
+        border: 1px solid #e2e8f0;
+        border-bottom-left-radius: 6px;
+    }
+
+    .message-bubble.error {
+        background: #fff1f2;
+        border: 1px solid #fecdd3;
+        color: #b42318;
+    }
+
+    .composer {
+        border-top: 1px solid #e2e8f0;
+        padding: 18px 24px 24px;
+        background: rgba(255, 255, 255, 0.96);
+    }
+
+    .composer-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+        color: #475569;
+        font-size: 0.9rem;
+    }
+
+    .composer-form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: end;
+    }
+
+    #message-input {
+        width: 100%;
+        min-height: 56px;
+        max-height: 160px;
+        resize: none;
+        border-radius: 18px;
+        border: 1px solid #d7e0ea;
+        background: #f8fafc;
+        padding: 16px 18px;
+        font: inherit;
+        line-height: 1.5;
+        color: #0f172a;
+        transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+
+    #message-input:focus {
+        outline: none;
+        border-color: #1976d2;
+        background: #fff;
+        box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.12);
+    }
+
+    .send-btn {
+        min-width: 132px;
+        height: 56px;
+        border: none;
+        border-radius: 18px;
+        background: linear-gradient(135deg, #1976d2 0%, #0f4c81 100%);
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+        padding: 0 20px;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+        box-shadow: 0 14px 28px rgba(25, 118, 210, 0.22);
+    }
+
+    .send-btn:hover {
+        transform: translateY(-1px);
+    }
+
+    .send-btn:disabled {
+        cursor: wait;
+        opacity: 0.7;
+        transform: none;
+    }
+
+    .insight-header {
+        padding-bottom: 4px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .insight-list {
+        display: grid;
+        gap: 12px;
+    }
+
+    .insight-item {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 14px;
+    }
+
+    .insight-label {
+        margin: 0 0 6px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #64748b;
+    }
+
+    .insight-value {
+        margin: 0;
+        color: #0f172a;
+        line-height: 1.55;
+        word-break: break-word;
+    }
+
+    .reference-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+    }
+
+    .reference-item {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 12px;
+    }
+
+    .reference-item a {
+        color: #0f4c81;
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .reference-item a:hover {
+        text-decoration: underline;
+    }
+
+    .reference-item p {
+        margin: 8px 0 0;
+        color: #475569;
+        font-size: 0.88rem;
+        line-height: 1.5;
+    }
+
+    .empty-state {
+        border: 1px dashed #cbd5e1;
+        border-radius: 18px;
+        padding: 18px;
+        background: rgba(248, 250, 252, 0.8);
+        color: #64748b;
+        line-height: 1.6;
+    }
+
+    .notice {
+        display: none;
+        margin: 0 24px 18px;
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        color: #9a3412;
+        line-height: 1.5;
+    }
+
+    .notice.show {
+        display: block;
+    }
+
+    @media (max-width: 1200px) {
+        .chat-layout {
+            grid-template-columns: 280px minmax(0, 1fr);
         }
 
-        html, body {
-            width: 100%;
-            height: 100%;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: white;
-            overflow: hidden;
+        .insight-panel {
+            grid-column: 1 / -1;
         }
+    }
 
-        .chat-container {
-            display: flex;
-            width: 100vw;
-            height: 100vh;
-            gap: 0;
-            background: white;
-        }
-
-        /* SIDEBAR */
-        .sidebar {
-            width: 280px;
-            background: #FAFAFA;
-            border-right: 1px solid #E0E0E0;
+    @media (max-width: 920px) {
+        .chat-shell {
             padding: 16px;
-            overflow-y: auto;
-            flex-shrink: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
         }
 
-        .user-card {
-            display: flex;
-            align-items: center;
-            gap: 12px;
+        .chat-layout {
+            grid-template-columns: 1fr;
+            min-height: auto;
+        }
+
+        .sidebar-panel,
+        .insight-panel {
+            order: 2;
+        }
+
+        .chat-panel {
+            order: 1;
+            min-height: 70vh;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .chat-shell {
             padding: 12px;
-            border: 1px solid #E0E0E0;
-            border-radius: 12px;
-            background: #FAFAFA;
         }
 
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
-            background: #1976D2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 18px;
-            flex-shrink: 0;
-        }
-
-        .user-info {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .user-name {
-            font-weight: bold;
-            font-size: 14px;
-            color: #1a1a1a;
-            margin: 0;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .user-role {
-            font-size: 11px;
-            color: #666;
-            margin: 2px 0 0 0;
-        }
-
-        .sidebar-section {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .sidebar-title {
-            font-size: 12px;
-            font-weight: bold;
-            color: #999;
-            text-transform: uppercase;
-            margin: 20px 0 8px 0;
-        }
-
-        .sidebar-btn {
-            padding: 10px 12px;
-            border: none;
-            background: transparent;
-            color: #1976D2;
-            cursor: pointer;
-            text-align: left;
-            font-size: 14px;
-            border-radius: 8px;
-            transition: background 0.2s;
-        }
-
-        .sidebar-btn:hover {
-            background: #E8F1F8;
-        }
-
-        /* RESIZABLE DIVIDER */
-        .divider {
-            width: 6px;
-            background: #E0E0E0;
-            cursor: col-resize;
-            flex-shrink: 0;
-            transition: background 0.2s;
-        }
-
-        .divider:hover {
-            background: #B0B0B0;
-        }
-
-        .divider.dragging {
-            background: #1976D2;
-        }
-
-        /* MAIN CHAT AREA */
-        .chat-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            background: white;
-            min-width: 0;
-        }
-
-        .chat-header {
-            padding: 16px;
-            border-bottom: 1px solid #E0E0E0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-shrink: 0;
-        }
-
-        .chat-header-left h2 {
-            font-size: 18px;
-            font-weight: bold;
-            color: #1a1a1a;
-            margin: 0 0 4px 0;
-        }
-
-        .chat-header-left p {
-            font-size: 11px;
-            color: #999;
-            margin: 0;
-        }
-
-        .messages-area {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
+        .chat-layout {
             gap: 12px;
-            background: white;
-            min-width: 0;
         }
 
-        .message-row {
-            display: flex;
-            align-items: flex-end;
-            gap: 8px;
-            width: 100%;
-            min-width: 0;
+        .chat-topbar,
+        .messages-area,
+        .composer,
+        .sidebar-panel,
+        .insight-panel {
+            padding-left: 16px;
+            padding-right: 16px;
         }
 
-        .message-row.user {
-            justify-content: flex-end;
-        }
-
-        .message-row.bot {
-            justify-content: flex-start;
-        }
-
-        .message-content {
-            display: flex;
+        .chat-topbar {
             flex-direction: column;
             align-items: flex-start;
-            max-width: 65%;
-            min-width: 0;
         }
 
-        .message-row.user .message-content {
-            align-items: flex-end;
+        .composer-form {
+            grid-template-columns: 1fr;
         }
 
-        .message-bubble {
-            padding: 12px 16px;
-            border-radius: 16px;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-            white-space: normal;
-            line-height: 1.4;
-        }
-
-        .message-bubble.user {
-            background: #1976D2;
-            color: white;
-        }
-
-        .message-bubble.bot {
-            background: #E8E8E8;
-            color: #1a1a1a;
-        }
-
-        .message-time {
-            font-size: 10px;
-            margin-top: 4px;
-            opacity: 0.7;
-            white-space: nowrap;
-            padding: 0 4px;
-        }
-
-        .message-time.user {
-            color: rgba(255, 255, 255, 0.7);
-        }
-
-        .message-time.bot {
-            color: #666;
-        }
-
-        /* INPUT AREA */
-        .input-area {
-            padding: 16px;
-            border-top: 1px solid #E0E0E0;
-            background: white;
-            display: flex;
-            gap: 8px;
-            align-items: flex-end;
-            flex-shrink: 0;
+        .send-btn {
             width: 100%;
-            min-height: 60px;
         }
 
-        #message-input {
-            flex: 1;
-            min-width: 0;
-            padding: 12px;
-            border: 1px solid #E0E0E0;
-            border-radius: 12px;
-            font-size: 14px;
-            font-family: inherit;
-            resize: none;
-            max-height: 120px;
-            min-height: 40px;
-            background: #F5F5F5;
-            line-height: 1.4;
+        .message-stack {
+            max-width: 100%;
         }
+    }
+</style>
 
-        #message-input:focus {
-            outline: none;
-            border-color: #1976D2;
-            background: white;
-        }
+<div class="chat-shell">
+    <div class="chat-layout">
+        <aside class="chat-card sidebar-panel">
+            <section class="user-panel">
+                <div class="user-avatar">{{ request.user.first_name|first|upper|default:"U" }}</div>
+                <p class="user-name">{{ request.user.first_name|default:request.user.username }}</p>
+                <p class="user-role">{{ request.user.userprofile.role|title }} account</p>
+            </section>
 
-        .input-buttons {
-            display: flex;
-            gap: 8px;
-            flex-shrink: 0;
-        }
+            <section>
+                <p class="panel-title">Actions</p>
+                <p class="panel-subtitle">Start a new complaint chat or reopen a recent conversation.</p>
+                <div class="action-grid" style="margin-top: 14px;">
+                    <button type="button" class="action-btn" id="new-chat-btn">Start New Chat <span>+</span></button>
+                </div>
+            </section>
 
-        .icon-btn {
-            width: 40px;
-            height: 40px;
-            border: none;
-            background: transparent;
-            color: #666;
-            cursor: pointer;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            transition: background 0.2s;
-            flex-shrink: 0;
-        }
+            <section>
+                <p class="panel-title">Recent Sessions</p>
+                <p class="panel-subtitle">Your last active complaint discussions.</p>
+                <div class="session-list" id="session-list" style="margin-top: 14px;">
+                    {% for session in chat_sessions %}
+                    <button
+                        type="button"
+                        class="session-btn"
+                        data-session-id="{{ session.id }}"
+                        data-session-title="{{ session.title|escape }}"
+                        data-session-language="{{ session.language }}"
+                    >
+                        <strong>{{ session.title }}</strong>
+                        <span>{{ session.get_language_display|default:session.language|upper }} chat</span>
+                    </button>
+                    {% empty %}
+                    <div class="empty-state">No chat history yet. Start a new session to begin collecting complaint details.</div>
+                    {% endfor %}
+                </div>
+            </section>
+        </aside>
 
-        .icon-btn:hover {
-            background: #F0F0F0;
-        }
-
-        .icon-btn.send {
-            color: #1976D2;
-            font-weight: bold;
-        }
-
-        .icon-btn.send:hover {
-            background: #E3F2FD;
-        }
-
-        /* RIGHT PANEL */
-        .data-panel {
-            width: 320px;
-            background: #FAFAFA;
-            border-left: 1px solid #E0E0E0;
-            padding: 16px;
-            overflow-y: auto;
-            flex-shrink: 0;
-        }
-
-        .data-panel h3 {
-            font-size: 16px;
-            font-weight: bold;
-            color: #1a1a1a;
-            margin: 0 0 16px 0;
-        }
-
-        .data-item {
-            background: white;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #E0E0E0;
-            margin-bottom: 12px;
-        }
-
-        .data-label {
-            font-size: 11px;
-            font-weight: bold;
-            color: #999;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
-
-        .data-value {
-            font-size: 13px;
-            color: #1a1a1a;
-            word-break: break-word;
-        }
-
-        .empty-state {
-            text-align: center;
-            color: #999;
-            font-size: 13px;
-            padding: 16px;
-        }
-
-        /* Scrollbar styling */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #D0D0D0;
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #A0A0A0;
-        }
-    </style>
-</head>
-<body>
-
-<div class="chat-container">
-    <!-- SIDEBAR -->
-    <div class="sidebar" id="sidebar">
-        <!-- User Card -->
-        <div class="user-card">
-            <div class="user-avatar" id="avatar">A</div>
-            <div class="user-info">
-                <p class="user-name" id="username">User</p>
-                <p class="user-role">Citizen</p>
+        <section class="chat-card chat-panel">
+            <div class="chat-topbar">
+                <div>
+                    <h1 class="chat-heading" id="chat-title">Complaint Assistant</h1>
+                    <p class="chat-status" id="chat-status">Start a conversation and describe the issue in Bangla or English.</p>
+                </div>
+                <div class="topbar-actions">
+                    <button type="button" class="secondary-btn" id="finalize-btn" disabled>Create Complaint</button>
+                    <div class="status-chip" id="chat-language-chip">Session pending</div>
+                </div>
             </div>
-        </div>
 
-        <!-- Sidebar Buttons -->
-        <div class="sidebar-section">
-            <p class="sidebar-title">Actions</p>
-            <button class="sidebar-btn" onclick="newChat()">➕ New Complaint</button>
-            <button class="sidebar-btn" onclick="viewHistory()">📋 View History</button>
-            <button class="sidebar-btn" onclick="openSettings()">⚙️ Settings</button>
-        </div>
-    </div>
+            <div class="notice" id="chat-notice"></div>
 
-    <!-- RESIZABLE DIVIDER -->
-    <div class="divider" id="divider"></div>
-
-    <!-- MAIN CHAT AREA -->
-    <div class="chat-main">
-        <!-- Header -->
-        <div class="chat-header">
-            <div class="chat-header-left">
-                <h2>Complaint Report</h2>
-                <p>Started today</p>
+            <div class="messages-area" id="messages-container">
+                <div class="welcome-card" id="welcome-card">
+                    <h3>Describe the civic problem clearly</h3>
+                    <p>Include the category, exact location or thana, and how long the issue has been happening. The assistant will turn that into structured complaint data as the chat progresses.</p>
+                </div>
             </div>
-        </div>
 
-        <!-- Messages -->
-        <div class="messages-area" id="messages-container">
-            <div class="empty-state">
-                <p>👋 Welcome! Tell me about a civic complaint you'd like to report.</p>
+            <div class="composer">
+                <div class="composer-label">
+                    <span>Press Enter to send, Shift+Enter for a new line.</span>
+                    <span id="composer-state">Waiting for a session</span>
+                </div>
+                <form class="composer-form" id="composer-form">
+                    <textarea id="message-input" placeholder="Example: There has been a pothole in Dhanmondi 27 for two weeks and it is getting worse."></textarea>
+                    <button type="submit" class="send-btn" id="send-btn" disabled>Send Message</button>
+                </form>
             </div>
-        </div>
+        </section>
 
-        <!-- Input Area -->
-        <div class="input-area">
-            <textarea 
-                id="message-input" 
-                placeholder="Type a new message here..." 
-                rows="1"
-                onkeypress="handleKeyPress(event)"
-            ></textarea>
-            <div class="input-buttons">
-                <button class="icon-btn" title="Attach file" onclick="alert('Coming soon')">📎</button>
-                <button class="icon-btn" title="Emoji" onclick="alert('Coming soon')">😀</button>
-                <button class="icon-btn send" onclick="sendMessage()" title="Send message">✈️</button>
+        <aside class="chat-card insight-panel">
+            <div class="insight-header">
+                <p class="panel-title">Complaint Data</p>
+                <p class="panel-subtitle">Structured details and validation results appear here after a few exchanges.</p>
             </div>
-        </div>
-    </div>
 
-    <!-- RIGHT PANEL - EXTRACTED DATA -->
-    <div class="data-panel">
-        <h3>📊 Complaint Data</h3>
-        <div id="extracted-data">
-            <div class="empty-state">Data will appear here...</div>
-        </div>
+            <div id="extracted-data" class="insight-list">
+                <div class="empty-state">No extracted complaint details yet. Keep chatting and the assistant will summarize the category, area, duration, keywords, and validation notes.</div>
+            </div>
+        </aside>
     </div>
 </div>
 
 <script>
-    let sidebarWidth = 280;
-    let isDragging = false;
+    const csrfToken = getCookie("csrftoken");
+    const textarea = document.getElementById("message-input");
+    const sendButton = document.getElementById("send-btn");
+    const composerForm = document.getElementById("composer-form");
+    const messagesContainer = document.getElementById("messages-container");
+    const extractedDataContainer = document.getElementById("extracted-data");
+    const chatTitle = document.getElementById("chat-title");
+    const chatStatus = document.getElementById("chat-status");
+    const languageChip = document.getElementById("chat-language-chip");
+    const composerState = document.getElementById("composer-state");
+    const notice = document.getElementById("chat-notice");
+    const sessionList = document.getElementById("session-list");
+    const newChatButton = document.getElementById("new-chat-btn");
+    const finalizeButton = document.getElementById("finalize-btn");
+
+    let currentSessionId = null;
+    let isSending = false;
+    let complaintDetailUrl = null;
 
     function getCookie(name) {
         let cookieValue = null;
-        if (document.cookie && document.cookie !== '') {
-            const cookies = document.cookie.split(';');
-            for (let i = 0; i < cookies.length; i++) {
+        if (document.cookie && document.cookie !== "") {
+            const cookies = document.cookie.split(";");
+            for (let i = 0; i < cookies.length; i += 1) {
                 const cookie = cookies[i].trim();
-                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                if (cookie.substring(0, name.length + 1) === (name + "=")) {
                     cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
                     break;
                 }
@@ -458,861 +652,395 @@
         return cookieValue;
     }
 
-    // Resizable sidebar
-    const divider = document.getElementById('divider');
-    const sidebar = document.getElementById('sidebar');
-
-    divider.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        divider.classList.add('dragging');
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
-        
-        const newWidth = e.clientX;
-        if (newWidth >= 200 && newWidth <= 450) {
-            sidebarWidth = newWidth;
-            sidebar.style.width = newWidth + 'px';
-        }
-    });
-
-    document.addEventListener('mouseup', () => {
-        isDragging = false;
-        divider.classList.remove('dragging');
-    });
-
-    // Auto-resize textarea
-    const textarea = document.getElementById('message-input');
-    textarea.addEventListener('input', () => {
-        textarea.style.height = '40px';
-        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-    });
-
-    function handleKeyPress(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    }
-
-    function sendMessage() {
-        const input = document.getElementById('message-input');
-        const message = input.value.trim();
-        if (!message) return;
-
-        const container = document.getElementById('messages-container');
-        
-        // Clear empty state if present
-        const empty = container.querySelector('.empty-state');
-        if (empty) empty.remove();
-
-        // Add user message
-        const userMsg = document.createElement('div');
-        userMsg.className = 'message-row user';
-        const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-        userMsg.innerHTML = `
-            <div class="message-content">
-                <div class="message-bubble user">${escapeHtml(message)}</div>
-                <div class="message-time user">${now}</div>
-            </div>
-        `;
-        container.appendChild(userMsg);
-
-        input.value = '';
-        input.style.height = '40px';
-        container.scrollTop = container.scrollHeight;
-
-        // Send to server
-        const sessionId = sessionStorage.getItem('chat_session_id');
-        if (!sessionId) {
-            console.error('No session ID');
-            return;
-        }
-
-        fetch(`/chatbot/session/${sessionId}/message/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify({ message: message })
-        })
-        .then(r => {
-            if (!r.ok) {
-                return r.text().then(text => {
-                    console.error('Response:', r.status, text);
-                    throw new Error(`HTTP ${r.status}`);
-                });
-            }
-            return r.json();
-        })
-        .then(data => {
-            // Add bot message
-            const botMsg = document.createElement('div');
-            botMsg.className = 'message-row bot';
-            botMsg.innerHTML = `
-                <div class="message-content">
-                    <div class="message-bubble bot">${escapeHtml(data.response)}</div>
-                    <div class="message-time bot">${now}</div>
-                </div>
-            `;
-            container.appendChild(botMsg);
-            container.scrollTop = container.scrollHeight;
-
-            // Update extracted data
-            if (data.extracted_data) {
-                updateExtractedData(data.extracted_data);
-            }
-        })
-        .catch(err => {
-            console.error('Error:', err);
-            const errMsg = document.createElement('div');
-            errMsg.className = 'message-row bot';
-            errMsg.innerHTML = `
-                <div class="message-content">
-                    <div class="message-bubble bot" style="background: #FFE0E0; color: #C33;">⚠️ Error: ${escapeHtml(err.message)}</div>
-                    <div class="message-time bot">${now}</div>
-                </div>
-            `;
-            container.appendChild(errMsg);
-            container.scrollTop = container.scrollHeight;
-        });
-    }
-
-    function updateExtractedData(data) {
-        const panel = document.getElementById('extracted-data');
-        let html = '';
-
-        if (data.keywords && data.keywords.length) {
-            html += `<div class="data-item"><div class="data-label">Keywords</div><div class="data-value">${data.keywords.join(', ')}</div></div>`;
-        }
-        if (data.category) {
-            html += `<div class="data-item"><div class="data-label">Category</div><div class="data-value">${data.category}</div></div>`;
-        }
-        if (data.area) {
-            html += `<div class="data-item"><div class="data-label">Area</div><div class="data-value">${data.area}</div></div>`;
-        }
-        if (data.inconsistency_score) {
-            html += `<div class="data-item"><div class="data-label">Score</div><div class="data-value">${data.inconsistency_score} / 5</div></div>`;
-        }
-
-        panel.innerHTML = html || '<div class="empty-state">📊 Data will appear here...</div>';
-    }
-
     function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
+        const div = document.createElement("div");
+        div.textContent = text || "";
         return div.innerHTML;
     }
 
-    function newChat() {
-        alert('New chat feature coming soon');
+    function formatTime(timestamp) {
+        if (!timestamp) {
+            return "Just now";
+        }
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     }
 
-    function viewHistory() {
-        alert('View history feature coming soon');
+    function setNotice(message) {
+        if (!message) {
+            notice.textContent = "";
+            notice.classList.remove("show");
+            return;
+        }
+        notice.textContent = message;
+        notice.classList.add("show");
     }
 
-    function openSettings() {
-        alert('Settings coming soon');
+    function setSendingState(sending) {
+        isSending = sending;
+        sendButton.disabled = sending || !currentSessionId;
+        finalizeButton.disabled = sending || !currentSessionId;
+        sendButton.textContent = sending ? "Sending..." : "Send Message";
+        composerState.textContent = currentSessionId
+            ? (sending ? "Assistant is thinking..." : "Ready to send")
+            : "Waiting for a session";
     }
 
-    // Initialize
-    window.addEventListener('load', () => {
-        // Set avatar and username from URL params or query
-        const firstName = localStorage.getItem('first_name') || 'User';
-        document.getElementById('avatar').textContent = firstName.charAt(0).toUpperCase();
-        document.getElementById('username').textContent = firstName;
+    function autoResizeTextarea() {
+        textarea.style.height = "56px";
+        textarea.style.height = Math.min(textarea.scrollHeight, 160) + "px";
+    }
 
-        // Create chat session
-        if (!sessionStorage.getItem('chat_session_id')) {
-            fetch('/chatbot/session/create/', {
-                method: 'POST',
+    function updateSessionHighlight() {
+        const buttons = sessionList.querySelectorAll(".session-btn[data-session-id]");
+        buttons.forEach((button) => {
+            button.classList.toggle("active", button.dataset.sessionId === String(currentSessionId));
+        });
+    }
+
+    function ensureSessionButton(session) {
+        if (sessionList.querySelector(`.session-btn[data-session-id="${session.id}"]`)) {
+            return;
+        }
+
+        const emptyState = sessionList.querySelector(".empty-state");
+        if (emptyState) {
+            emptyState.remove();
+        }
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "session-btn";
+        button.dataset.sessionId = session.id;
+        button.dataset.sessionTitle = session.title;
+        button.dataset.sessionLanguage = session.language;
+        button.innerHTML = `
+            <strong>${escapeHtml(session.title)}</strong>
+            <span>${escapeHtml((session.language || "en").toUpperCase())} chat</span>
+        `;
+        sessionList.prepend(button);
+    }
+
+    function setSessionMeta(session) {
+        currentSessionId = session.id;
+        complaintDetailUrl = session.complaint_detail_url || null;
+        chatTitle.textContent = session.title || "Complaint Assistant";
+        chatStatus.textContent = complaintDetailUrl
+            ? "This conversation has already been turned into a formal complaint."
+            : "Describe the complaint, location, and duration so the assistant can structure the report.";
+        languageChip.textContent = `${(session.language || "en").toUpperCase()} session`;
+        finalizeButton.textContent = complaintDetailUrl ? "Open Complaint" : "Create Complaint";
+        setNotice("");
+        updateSessionHighlight();
+        setSendingState(false);
+    }
+
+    function clearMessages() {
+        messagesContainer.innerHTML = `
+            <div class="welcome-card" id="welcome-card">
+                <h3>Describe the civic problem clearly</h3>
+                <p>Include the category, exact location or thana, and how long the issue has been happening. The assistant will turn that into structured complaint data as the chat progresses.</p>
+            </div>
+        `;
+    }
+
+    function addMessage(role, content, timestamp, extraClass = "") {
+        const welcomeCard = document.getElementById("welcome-card");
+        if (welcomeCard) {
+            welcomeCard.remove();
+        }
+
+        const row = document.createElement("div");
+        row.className = `message-row ${role}`;
+        row.innerHTML = `
+            <div class="message-stack">
+                <div class="message-meta">
+                    <span>${role === "user" ? "You" : "Assistant"}</span>
+                    <span>${formatTime(timestamp)}</span>
+                </div>
+                <div class="message-bubble ${role} ${extraClass}">${escapeHtml(content)}</div>
+            </div>
+        `;
+        messagesContainer.appendChild(row);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    function renderExtractedData(data) {
+        if (!data) {
+            extractedDataContainer.innerHTML = '<div class="empty-state">No extracted complaint details yet. Keep chatting and the assistant will summarize the category, area, duration, keywords, and validation notes.</div>';
+            return;
+        }
+
+        let html = "";
+        const items = [
+            ["Category", data.category],
+            ["Area", data.area],
+            ["Duration", data.duration],
+            ["Keywords", Array.isArray(data.keywords) ? data.keywords.join(", ") : data.keywords],
+            ["Inconsistency Score", data.inconsistency_score ? `${data.inconsistency_score} / 5` : ""],
+            ["Primary Policy", data.policy_reference],
+            ["Captured At", data.timestamp ? new Date(data.timestamp).toLocaleString() : ""]
+        ];
+
+        items.forEach(([label, value]) => {
+            if (!value) {
+                return;
+            }
+            html += `
+                <div class="insight-item">
+                    <p class="insight-label">${escapeHtml(label)}</p>
+                    <p class="insight-value">${escapeHtml(value)}</p>
+                </div>
+            `;
+        });
+
+        if (data.validation) {
+            if (data.validation.recommendation) {
+                html += `
+                    <div class="insight-item">
+                        <p class="insight-label">Recommendation</p>
+                        <p class="insight-value">${escapeHtml(data.validation.recommendation)}</p>
+                    </div>
+                `;
+            }
+
+            if (Array.isArray(data.validation.inconsistencies) && data.validation.inconsistencies.length) {
+                html += `
+                    <div class="insight-item">
+                        <p class="insight-label">Validation Notes</p>
+                        <p class="insight-value">${escapeHtml(data.validation.inconsistencies.join(" | "))}</p>
+                    </div>
+                `;
+            }
+        }
+
+        if (Array.isArray(data.validation?.references) && data.validation.references.length) {
+            const references = data.validation.references.map((reference) => {
+                const title = escapeHtml(reference.title || "Reference");
+                const content = escapeHtml(reference.content || "");
+                if (reference.url) {
+                    const url = escapeHtml(reference.url);
+                    return `
+                        <div class="reference-item">
+                            <a href="${url}" target="_blank" rel="noreferrer">${title}</a>
+                            <p>${content}</p>
+                        </div>
+                    `;
+                }
+                return `
+                    <div class="reference-item">
+                        <strong>${title}</strong>
+                        <p>${content}</p>
+                    </div>
+                `;
+            }).join("");
+
+            html += `<div class="reference-list">${references}</div>`;
+        }
+
+        if (Array.isArray(data.validation?.policy_references) && data.validation.policy_references.length) {
+            const policies = data.validation.policy_references.map((reference) => `
+                <div class="reference-item">
+                    <strong>${escapeHtml(reference.title || "Policy Reference")}</strong>
+                    <p>${escapeHtml(reference.content || "")}</p>
+                </div>
+            `).join("");
+
+            html += `<div class="reference-list">${policies}</div>`;
+        }
+
+        extractedDataContainer.innerHTML = html || '<div class="empty-state">No extracted complaint details yet. Keep chatting and the assistant will summarize the category, area, duration, keywords, and validation notes.</div>';
+    }
+
+    async function loadSession(sessionId) {
+        try {
+            setNotice("");
+            const response = await fetch(`/chatbot/session/${sessionId}/`);
+            const data = await response.json();
+
+            if (!response.ok || data.success === false) {
+                throw new Error(data.error || `Unable to load session ${sessionId}.`);
+            }
+
+            setSessionMeta(data.session);
+            clearMessages();
+
+            if (Array.isArray(data.messages) && data.messages.length) {
+                messagesContainer.innerHTML = "";
+                data.messages.forEach((message) => {
+                    addMessage(
+                        message.role === "assistant" ? "assistant" : "user",
+                        message.content,
+                        message.timestamp
+                    );
+                });
+            }
+
+            renderExtractedData(data.extracted_data);
+            sessionStorage.setItem("chat_session_id", data.session.id);
+        } catch (error) {
+            setNotice(error.message);
+        }
+    }
+
+    async function finalizeComplaint() {
+        if (!currentSessionId) {
+            return;
+        }
+
+        if (complaintDetailUrl) {
+            window.location.href = complaintDetailUrl;
+            return;
+        }
+
+        try {
+            setSendingState(true);
+            const response = await fetch(`/chatbot/session/${currentSessionId}/close/`, {
+                method: "POST",
                 headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCookie('csrftoken')
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrfToken
                 },
                 body: JSON.stringify({})
-            })
-            .then(r => {
-                if (!r.ok) {
-                    return r.text().then(text => {
-                        throw new Error(`HTTP ${r.status}: ${text.substring(0, 200)}`);
-                    });
-                }
-                return r.json();
-            })
-            .then(d => {
-                if (d.success || d.session_id) {
-                    sessionStorage.setItem('chat_session_id', d.session_id);
-                    console.log('✓ Chat session:', d.session_id);
-                } else {
-                    throw new Error(d.error || 'Failed');
-                }
-            })
-            .catch(err => {
-                console.error('❌ Error:', err);
             });
+
+            const data = await response.json();
+            if (!response.ok || data.success === false) {
+                throw new Error(data.error || "Unable to create the complaint from this chat.");
+            }
+
+            complaintDetailUrl = data.complaint_detail_url || null;
+            finalizeButton.textContent = complaintDetailUrl ? "Open Complaint" : "Create Complaint";
+            setNotice(data.message || "Complaint created successfully.");
+
+            if (complaintDetailUrl) {
+                window.location.href = complaintDetailUrl;
+            }
+        } catch (error) {
+            setNotice(error.message);
+        } finally {
+            setSendingState(false);
         }
-        
-        // Focus textarea
+    }
+
+    async function createNewSession() {
+        try {
+            setSendingState(true);
+            setNotice("");
+
+            const response = await fetch("/chatbot/session/create/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrfToken
+                },
+                body: JSON.stringify({
+                    title: "New Complaint Chat",
+                    language: "en"
+                })
+            });
+
+            const data = await response.json();
+            if (!response.ok || data.success === false) {
+                throw new Error(data.error || "Unable to create a new chat session.");
+            }
+
+            ensureSessionButton({
+                id: data.session_id,
+                title: data.title || "New Complaint Chat",
+                language: data.language || "en"
+            });
+
+            clearMessages();
+            renderExtractedData(null);
+            setSessionMeta({
+                id: data.session_id,
+                title: data.title || "New Complaint Chat",
+                language: data.language || "en"
+            });
+            sessionStorage.setItem("chat_session_id", data.session_id);
+        } catch (error) {
+            setNotice(error.message);
+            setSendingState(false);
+        }
+    }
+
+    async function sendMessage(event) {
+        event.preventDefault();
+        if (isSending || !currentSessionId) {
+            return;
+        }
+
+        const message = textarea.value.trim();
+        if (!message) {
+            return;
+        }
+
+        addMessage("user", message, new Date().toISOString());
+        textarea.value = "";
+        autoResizeTextarea();
+        setSendingState(true);
+
+        try {
+            const response = await fetch(`/chatbot/session/${currentSessionId}/message/`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrfToken
+                },
+                body: JSON.stringify({ message })
+            });
+
+            const data = await response.json();
+            if (!response.ok || data.success === false) {
+                throw new Error(data.error || "The assistant could not answer that message.");
+            }
+
+            addMessage("assistant", data.response, data.timestamp);
+            renderExtractedData(data.extracted_data);
+            setNotice("");
+        } catch (error) {
+            addMessage("assistant", error.message, new Date().toISOString(), "error");
+            setNotice("The request reached the server, but the assistant could not complete it. This usually means the AI API keys are missing or invalid.");
+        } finally {
+            setSendingState(false);
+        }
+    }
+
+    textarea.addEventListener("input", autoResizeTextarea);
+    textarea.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            composerForm.requestSubmit();
+        }
+    });
+
+    sessionList.addEventListener("click", (event) => {
+        const button = event.target.closest(".session-btn[data-session-id]");
+        if (!button) {
+            return;
+        }
+        loadSession(button.dataset.sessionId);
+    });
+
+    newChatButton.addEventListener("click", createNewSession);
+    finalizeButton.addEventListener("click", finalizeComplaint);
+    composerForm.addEventListener("submit", sendMessage);
+
+    window.addEventListener("load", async () => {
+        autoResizeTextarea();
+
+        const storedSessionId = sessionStorage.getItem("chat_session_id");
+        const firstSessionButton = sessionList.querySelector(".session-btn[data-session-id]");
+        const defaultSessionId = storedSessionId || (firstSessionButton && firstSessionButton.dataset.sessionId);
+
+        if (defaultSessionId) {
+            await loadSession(defaultSessionId);
+        } else {
+            await createNewSession();
+        }
+
         textarea.focus();
     });
 </script>
-
-</body>
-</html>
-{% extends 'complaints/base.html' %}
-
-{% block title %}Complaint Assistant - Chat{% endblock %}
-
-{% block content %}
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: white;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        .chat-container {
-            display: flex;
-            height: calc(100vh - 64px);
-            gap: 0;
-            background: white;
-        }
-
-        /* SIDEBAR */
-        .sidebar {
-            width: 280px;
-            background: #FAFAFA;
-            border-right: 1px solid #E0E0E0;
-            padding: 16px;
-            overflow-y: auto;
-            flex-shrink: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .user-card {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px;
-            border: 1px solid #E0E0E0;
-            border-radius: 12px;
-            background: #FAFAFA;
-        }
-
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 8px;
-            background: #1976D2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 18px;
-            flex-shrink: 0;
-        }
-
-        .user-info {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .user-name {
-            font-weight: bold;
-            font-size: 14px;
-            color: #1a1a1a;
-            margin: 0;
-        }
-
-        .user-role {
-            font-size: 11px;
-            color: #666;
-            margin: 2px 0 0 0;
-        }
-
-        .sidebar-section {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .sidebar-title {
-            font-size: 12px;
-            font-weight: bold;
-            color: #999;
-            text-transform: uppercase;
-            margin: 20px 0 8px 0;
-        }
-
-        .sidebar-btn {
-            padding: 10px 12px;
-            border: none;
-            background: transparent;
-            color: #1976D2;
-            cursor: pointer;
-            text-align: left;
-            font-size: 14px;
-            border-radius: 8px;
-            transition: background 0.2s;
-        }
-
-        .sidebar-btn:hover {
-            background: #E8F1F8;
-        }
-
-        /* RESIZABLE DIVIDER */
-        .divider {
-            width: 6px;
-            background: #E0E0E0;
-            cursor: col-resize;
-            flex-shrink: 0;
-            transition: background 0.2s;
-        }
-
-        .divider:hover {
-            background: #B0B0B0;
-        }
-
-        .divider.dragging {
-            background: #1976D2;
-        }
-
-        /* MAIN CHAT AREA */
-        .chat-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            background: white;
-        }
-
-        .chat-header {
-            padding: 16px;
-            border-bottom: 1px solid #E0E0E0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .chat-header-left h2 {
-            font-size: 18px;
-            font-weight: bold;
-            color: #1a1a1a;
-            margin: 0 0 4px 0;
-        }
-
-        .chat-header-left p {
-            font-size: 11px;
-            color: #999;
-            margin: 0;
-        }
-
-        .messages-area {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            background: white;
-            width: 100%;
-            min-width: 0;
-        }
-
-        .message-row {
-            display: flex;
-            align-items: flex-end;
-            gap: 8px;
-            margin-bottom: 4px;
-            width: 100%;
-            min-width: 0;
-        }
-
-        .message-row.user {
-            justify-content: flex-end;
-        }
-
-        .message-row.bot {
-            justify-content: flex-start;
-        }
-
-        .message-bubble {
-            padding: 12px;
-            border-radius: 16px;
-            max-width: 65%;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-            white-space: pre-wrap;
-            line-height: 1.4;
-        }
-
-        .message-bubble.user {
-            background: #1976D2;
-            color: white;
-        }
-
-        .message-bubble.bot {
-            background: #E8E8E8;
-            color: #1a1a1a;
-        }
-
-        .message-time {
-            font-size: 10px;
-            margin-top: 4px;
-            opacity: 0.7;
-            white-space: nowrap;
-        }
-
-        .message-time.user {
-            color: rgba(255, 255, 255, 0.7);
-        }
-
-        .message-time.bot {
-            color: #666;
-        }
-
-        /* INPUT AREA */
-        .input-area {
-            padding: 16px;
-            border-top: 1px solid #E0E0E0;
-            background: white;
-            display: flex;
-            gap: 8px;
-            align-items: flex-end;
-            flex-shrink: 0;
-            width: 100%;
-        }
-
-        #message-input {
-            flex: 1;
-            min-width: 0;
-            padding: 12px;
-            border: 1px solid #E0E0E0;
-            border-radius: 12px;
-            font-size: 14px;
-            font-family: inherit;
-            resize: none;
-            max-height: 120px;
-            min-height: 40px;
-            background: #F5F5F5;
-            line-height: 1.4;
-        }
-
-        #message-input:focus {
-            outline: none;
-            border-color: #1976D2;
-            background: white;
-        }
-
-        .input-buttons {
-            display: flex;
-            gap: 8px;
-            flex-shrink: 0;
-        }
-
-        .icon-btn {
-            width: 40px;
-            height: 40px;
-            border: none;
-            background: transparent;
-            color: #666;
-            cursor: pointer;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            transition: background 0.2s;
-            flex-shrink: 0;
-        }
-
-        .icon-btn:hover {
-            background: #F0F0F0;
-        }
-
-        .icon-btn.send {
-            color: #1976D2;
-            font-weight: bold;
-        }
-
-        .icon-btn.send:hover {
-            background: #E3F2FD;
-        }
-
-        /* RIGHT PANEL */
-        .data-panel {
-            width: 320px;
-            background: #FAFAFA;
-            border-left: 1px solid #E0E0E0;
-            padding: 16px;
-            overflow-y: auto;
-            flex-shrink: 0;
-        }
-
-        .data-panel h3 {
-            font-size: 16px;
-            font-weight: bold;
-            color: #1a1a1a;
-            margin: 0 0 16px 0;
-        }
-
-        .data-item {
-            background: white;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #E0E0E0;
-            margin-bottom: 12px;
-        }
-
-        .data-label {
-            font-size: 11px;
-            font-weight: bold;
-            color: #999;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
-
-        .data-value {
-            font-size: 13px;
-            color: #1a1a1a;
-            word-break: break-word;
-        }
-
-        .empty-state {
-            text-align: center;
-            color: #999;
-            font-size: 13px;
-            padding: 16px;
-        }
-
-        /* Scrollbar styling */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #D0D0D0;
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #A0A0A0;
-        }
-    </style>
-</head>
-<body>
-
-<div class="chat-container">
-    <!-- SIDEBAR -->
-    <div class="sidebar" id="sidebar">
-        <!-- User Card -->
-        <div class="user-card">
-            <div class="user-avatar">{{ request.user.first_name|first|upper|default:"U" }}</div>
-            <div class="user-info">
-                <p class="user-name">{{ request.user.first_name|default:"User" }}</p>
-                <p class="user-role">Citizen</p>
-            </div>
-        </div>
-
-        <!-- Sidebar Buttons -->
-        <div class="sidebar-section">
-            <p class="sidebar-title">Actions</p>
-            <button class="sidebar-btn" onclick="newChat()">➕ New Complaint</button>
-            <button class="sidebar-btn" onclick="viewHistory()">📋 View History</button>
-            <button class="sidebar-btn" onclick="openSettings()">⚙️ Settings</button>
-        </div>
-    </div>
-
-    <!-- RESIZABLE DIVIDER -->
-    <div class="divider" id="divider"></div>
-
-    <!-- MAIN CHAT AREA -->
-    <div class="chat-main">
-        <!-- Header -->
-        <div class="chat-header">
-            <div class="chat-header-left">
-                <h2>Complaint Report</h2>
-                <p>Started today</p>
-            </div>
-        </div>
-
-        <!-- Messages -->
-        <div class="messages-area" id="messages-container">
-            <div class="empty-state">
-                <p>👋 Welcome! Tell me about a civic complaint you'd like to report.</p>
-            </div>
-        </div>
-
-        <!-- Input Area -->
-        <div class="input-area">
-            <textarea 
-                id="message-input" 
-                placeholder="Type a new message here..." 
-                rows="2"
-                onkeypress="handleKeyPress(event)"
-            ></textarea>
-            <div class="input-buttons">
-                <button class="icon-btn" title="Attach file">📎</button>
-                <button class="icon-btn" title="Emoji">😀</button>
-                <button class="icon-btn send" onclick="sendMessage()" title="Send message">✈️</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- RIGHT PANEL - EXTRACTED DATA -->
-    <div class="data-panel">
-        <h3>📊 Complaint Data</h3>
-        <div id="extracted-data">
-            <div class="empty-state">Data will appear here...</div>
-        </div>
-    </div>
-</div>
-
-<script>
-    let sidebarWidth = 280;
-    let isDragging = false;
-
-    // Resizable sidebar
-    const divider = document.getElementById('divider');
-    const sidebar = document.getElementById('sidebar');
-
-    divider.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        divider.classList.add('dragging');
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
-        
-        const newWidth = e.clientX;
-        if (newWidth >= 200 && newWidth <= 450) {
-            sidebarWidth = newWidth;
-            sidebar.style.width = newWidth + 'px';
-        }
-    });
-
-    document.addEventListener('mouseup', () => {
-        isDragging = false;
-        divider.classList.remove('dragging');
-    });
-
-    // Auto-resize textarea
-    const textarea = document.getElementById('message-input');
-    textarea.addEventListener('input', () => {
-        textarea.style.height = 'auto';
-        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-    });
-
-    function handleKeyPress(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    }
-
-    function sendMessage() {
-        const input = document.getElementById('message-input');
-        const message = input.value.trim();
-        if (!message) return;
-
-        const container = document.getElementById('messages-container');
-        
-        // Clear empty state if present
-        const empty = container.querySelector('.empty-state');
-        if (empty) empty.remove();
-
-        // Add user message
-        const userMsg = document.createElement('div');
-        userMsg.className = 'message-row user';
-        const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-        userMsg.innerHTML = `
-            <div>
-                <div class="message-bubble user">${escapeHtml(message)}</div>
-                <div class="message-time user">${now}</div>
-            </div>
-        `;
-        container.appendChild(userMsg);
-
-        input.value = '';
-        input.style.height = 'auto';
-        container.scrollTop = container.scrollHeight;
-
-        // Send to server
-        const sessionId = sessionStorage.getItem('chat_session_id');
-        if (!sessionId) {
-            alert('Chat session not initialized. Please refresh the page.');
-            return;
-        }
-
-        fetch(`/chatbot/session/${sessionId}/message/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
-            },
-            body: JSON.stringify({
-                message: message
-            })
-        })
-        .then(r => {
-            if (!r.ok) {
-                console.error('Response status:', r.status);
-                return r.json().then(d => { throw new Error(d.error || 'Server error'); });
-            }
-            return r.json();
-        })
-        .then(data => {
-            if (data.success === false) {
-                throw new Error(data.error || 'Unknown error');
-            }
-            
-            // Add bot message
-            const botMsg = document.createElement('div');
-            botMsg.className = 'message-row bot';
-            botMsg.innerHTML = `
-                <div>
-                    <div class="message-bubble bot">${escapeHtml(data.response)}</div>
-                    <div class="message-time bot">${now}</div>
-                </div>
-            `;
-            container.appendChild(botMsg);
-            container.scrollTop = container.scrollHeight;
-
-            // Update extracted data
-            if (data.extracted_data) {
-                updateExtractedData(data.extracted_data);
-            }
-        })
-        .catch(err => {
-            console.error('Error:', err);
-            const errMsg = document.createElement('div');
-            errMsg.className = 'message-row bot';
-            errMsg.innerHTML = `
-                <div>
-                    <div class="message-bubble bot" style="background: #FFE0E0; color: #C33;">Error: ${escapeHtml(err.message)}</div>
-                    <div class="message-time bot">${now}</div>
-                </div>
-            `;
-            container.appendChild(errMsg);
-            container.scrollTop = container.scrollHeight;
-        });
-    }
-
-    function updateExtractedData(data) {
-        const panel = document.getElementById('extracted-data');
-        let html = '';
-
-        if (data.keywords && data.keywords.length) {
-            html += `
-                <div class="data-item">
-                    <div class="data-label">Keywords</div>
-                    <div class="data-value">${data.keywords.join(', ')}</div>
-                </div>
-            `;
-        }
-        if (data.category) {
-            html += `
-                <div class="data-item">
-                    <div class="data-label">Category</div>
-                    <div class="data-value">${data.category}</div>
-                </div>
-            `;
-        }
-        if (data.area) {
-            html += `
-                <div class="data-item">
-                    <div class="data-label">Area</div>
-                    <div class="data-value">${data.area}</div>
-                </div>
-            `;
-        }
-        if (data.inconsistency_score) {
-            html += `
-                <div class="data-item">
-                    <div class="data-label">Inconsistency Score</div>
-                    <div class="data-value">${data.inconsistency_score} / 5</div>
-                </div>
-            `;
-        }
-        if (data.timestamp) {
-            html += `
-                <div class="data-item">
-                    <div class="data-label">Timestamp</div>
-                    <div class="data-value">${new Date(data.timestamp).toLocaleString()}</div>
-                </div>
-            `;
-        }
-
-        panel.innerHTML = html || '<div class="empty-state">📊 Data will appear here...</div>';
-    }
-
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    function newChat() {
-        alert('New chat feature coming soon');
-    }
-
-    function viewHistory() {
-        alert('View history feature coming soon');
-    }
-
-    function openSettings() {
-        alert('Settings coming soon');
-    }
-
-    // Initialize
-    window.addEventListener('load', () => {
-        if (!sessionStorage.getItem('chat_session_id')) {
-            fetch('/chatbot/session/create/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: JSON.stringify({})
-            })
-            .then(r => r.json())
-            .then(d => {
-                if (d.success || d.session_id) {
-                    sessionStorage.setItem('chat_session_id', d.session_id);
-                    console.log('Chat session created:', d.session_id);
-                } else {
-                    console.error('Failed to create chat session:', d);
-                }
-            })
-            .catch(err => console.error('Error creating session:', err));
-        }
-        
-        // Focus on textarea
-        document.getElementById('message-input').focus();
-    });
-</script>
-
-</body>
-</html>
-
 {% endblock %}

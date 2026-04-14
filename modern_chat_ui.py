@@ -303,6 +303,7 @@ class ModernChatUI:
             padding=16,
             border=ft.border.only(top=ft.BorderSide(1, "#E0E0E0")),
             bgcolor="#FFFFFF",
+            expand=True,
         )
 
         return input_container
@@ -345,6 +346,7 @@ class ModernChatUI:
                         size=14,
                         color=ft.Colors.WHITE,
                         selectable=True,
+                        max_lines=None,
                     ),
                     ft.Text(
                         datetime.now().strftime("%I:%M %p"),
@@ -357,6 +359,7 @@ class ModernChatUI:
             padding=12,
             bgcolor="#1976D2",
             border_radius=16,
+            width=500,
         )
 
         message_row = ft.Row(
@@ -399,6 +402,7 @@ class ModernChatUI:
                         size=14,
                         color="#1a1a1a",
                         selectable=True,
+                        max_lines=None,
                     ),
                     ft.Text(
                         datetime.now().strftime("%I:%M %p"),
@@ -411,6 +415,7 @@ class ModernChatUI:
             padding=12,
             bgcolor="#E8E8E8",
             border_radius=16,
+            width=500,
         )
 
         message_row = ft.Row(

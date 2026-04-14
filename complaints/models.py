@@ -94,6 +94,13 @@ class ChatSession(models.Model):
     """Chat session for complaint-related conversations."""
     
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chat_sessions')
+    generated_complaint = models.ForeignKey(
+        'Complaint',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='source_chat_sessions',
+    )
     title = models.CharField(max_length=200, default="New Complaint Chat")
     language = models.CharField(
         max_length=10,
