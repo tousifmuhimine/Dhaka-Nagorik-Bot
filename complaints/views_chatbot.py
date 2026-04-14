@@ -9,13 +9,24 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from .models import ChatMessage, ChatSession, Complaint, ExtractedComplaint
+from .models import ChatAttachment, ChatMessage, ChatSession, Complaint, ExtractedComplaint
+from .services.document_service import ComplaintDocumentService
+from .services.email_service import ComplaintEmailService
 from .services.groq_service import GroqService
+from .services.image_analysis_service import ImageAnalysisService
 from .services.rag_service import RAGService
 from .services.web_search_service import WebSearchService
 
 
 MIN_MESSAGES_FOR_EXTRACTION = 2
+ALLOWED_IMAGE_TYPES = {
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+}
+MAX_ATTACHMENTS_PER_MESSAGE = 5
+MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024
 
 
 def get_rag_service():
@@ -25,6 +36,117 @@ def get_rag_service():
         service.load_policies_from_pdfs()
         get_rag_service._instance = service
     return get_rag_service._instance
+
+
+def extract_request_payload(request):
+    """Support both JSON and multipart chat requests."""
+    content_type = request.content_type or ''
+    if content_type.startswith('application/json'):
+        data = json.loads(request.body or '{}')
+        return {
+            'message': (data.get('message') or '').strip(),
+            'photos': [],
+        }
+
+    return {
+        'message': (request.POST.get('message') or '').strip(),
+        'photos': request.FILES.getlist('photos'),
+    }
+
+
+def validate_attachments(uploaded_files):
+    """Allow only a few image uploads per chat turn."""
+    if len(uploaded_files) > MAX_ATTACHMENTS_PER_MESSAGE:
+        return f'Please upload no more than {MAX_ATTACHMENTS_PER_MESSAGE} photos at a time.'
+
+    for uploaded in uploaded_files:
+        if uploaded.content_type not in ALLOWED_IMAGE_TYPES:
+            return f'{uploaded.name} is not a supported image type.'
+        if uploaded.size > MAX_ATTACHMENT_SIZE:
+            return f'{uploaded.name} is larger than 8 MB.'
+    return ''
+
+
+def serialize_attachment(attachment, request=None):
+    """Convert an attachment record to API JSON."""
+    url = attachment.file.url if attachment.file else ''
+    if request and url:
+        url = request.build_absolute_uri(url)
+
+    return {
+        'id': attachment.id,
+        'name': attachment.original_name,
+        'content_type': attachment.content_type,
+        'url': url,
+    }
+
+
+def serialize_message(message, request=None):
+    """Serialize a chat message with any uploaded media."""
+    return {
+        'id': message.id,
+        'role': message.role,
+        'content': message.content,
+        'timestamp': message.timestamp,
+        'attachments': [serialize_attachment(attachment, request) for attachment in message.attachments.all()],
+    }
+
+
+def build_model_history(chat_session: ChatSession, include_image_analysis: bool = True):
+    """Build the conversation history used by Groq and extraction."""
+    messages = (
+        chat_session.messages.all()
+        .prefetch_related('attachments')
+        .order_by('timestamp')
+    )
+
+    history = []
+    image_analyzer = ImageAnalysisService() if include_image_analysis else None
+    
+    for message in messages:
+        attachments = message.attachments.all()
+        attachment_names = [attachment.original_name for attachment in attachments]
+        attachment_note = ''
+        
+        if attachment_names and include_image_analysis and image_analyzer:
+            # Analyze images automatically
+            image_analyses = []
+            for attachment in attachments:
+                try:
+                    if attachment.file:
+                        analysis = image_analyzer.analyze_complaint_image(attachment.file.path)
+                        if analysis.get('success'):
+                            image_analyses.append(analysis)
+                except Exception as e:
+                    print(f"Image analysis error for {attachment.original_name}: {e}")
+            
+            # Format image analysis for the model
+            if image_analyses:
+                analysis_text = "\n\nImage Analysis Results:\n"
+                for idx, analysis in enumerate(image_analyses, 1):
+                    analysis_text += f"\nImage {idx}:\n"
+                    analysis_text += f"  Issue Type: {analysis.get('issue_type', 'unknown')}\n"
+                    analysis_text += f"  Severity: {analysis.get('severity', 'unknown')}\n"
+                    if analysis.get('location_indicators'):
+                        analysis_text += f"  Location Clues: {', '.join(analysis['location_indicators'])}\n"
+                    if analysis.get('safety_concerns'):
+                        analysis_text += f"  Safety Concerns: {', '.join(analysis['safety_concerns'])}\n"
+                    analysis_text += f"  Analysis: {analysis.get('raw_analysis', '')}\n"
+                attachment_note = analysis_text
+            else:
+                attachment_note = f"\n\nAttached photo evidence: {', '.join(attachment_names)}"
+        elif attachment_names:
+            attachment_note = f"\n\nAttached photo evidence: {', '.join(attachment_names)}"
+
+        content = (message.content or '').strip()
+        if attachment_note:
+            content = f"{content}{attachment_note}".strip() if content else attachment_note.strip()
+
+        history.append({
+            'role': message.role,
+            'content': content,
+        })
+    return history
 
 
 def build_retrieval_query(conversation: list[dict]) -> str:
@@ -59,8 +181,9 @@ def validation_prompt_context(validation: dict) -> str:
     if validation.get("inconsistencies"):
         lines.append("Validation notes: " + "; ".join(validation["inconsistencies"]))
     if validation.get("references"):
-        top_titles = [reference.get("title", "Reference") for reference in validation["references"][:2]]
-        lines.append("Recent references: " + ", ".join(top_titles))
+        top_titles = [reference.get("title", "Reference") for reference in validation["references"][:2] if isinstance(reference, dict)]
+        if top_titles:
+            lines.append("Recent references: " + ", ".join(top_titles))
     return "\n".join(lines)
 
 
@@ -143,11 +266,7 @@ def serialize_extracted_complaint(extracted: ExtractedComplaint):
 
 def extract_complaint_info(chat_session: ChatSession):
     """Extract, validate, and persist structured complaint information."""
-    messages = list(
-        chat_session.messages.all()
-        .values("role", "content")
-        .order_by("timestamp")
-    )
+    messages = build_model_history(chat_session)
     if len(messages) < MIN_MESSAGES_FOR_EXTRACTION:
         return None
 
@@ -266,22 +385,32 @@ def send_message(request, session_id):
     chat_session = get_object_or_404(ChatSession, id=session_id, user=request.user)
 
     try:
-        data = json.loads(request.body or "{}")
-        user_message = (data.get("message") or "").strip()
-        if not user_message:
-            return JsonResponse({"success": False, "error": "Empty message"}, status=400)
+        payload = extract_request_payload(request)
+        user_message = payload['message']
+        uploaded_files = payload['photos']
+        validation_error = validate_attachments(uploaded_files)
 
-        ChatMessage.objects.create(
+        if validation_error:
+            return JsonResponse({"success": False, "error": validation_error}, status=400)
+
+        if not user_message and not uploaded_files:
+            return JsonResponse({"success": False, "error": "Please enter a message or attach at least one photo."}, status=400)
+
+        chat_message = ChatMessage.objects.create(
             chat_session=chat_session,
             role="user",
             content=user_message,
         )
+        for uploaded in uploaded_files:
+            ChatAttachment.objects.create(
+                message=chat_message,
+                file=uploaded,
+                original_name=uploaded.name,
+                content_type=uploaded.content_type or '',
+            )
 
-        conversation_history = list(
-            chat_session.messages.all()
-            .values("role", "content")
-            .order_by("timestamp")
-        )
+        # Build conversation history with automatic image analysis
+        conversation_history = build_model_history(chat_session, include_image_analysis=True)
 
         rag_service = get_rag_service()
         retrieval_query = build_retrieval_query(conversation_history)
@@ -315,7 +444,7 @@ def send_message(request, session_id):
             validation_context=validation_prompt_context(existing_validation),
         )
 
-        ChatMessage.objects.create(
+        assistant_message = ChatMessage.objects.create(
             chat_session=chat_session,
             role="assistant",
             content=ai_response,
@@ -327,8 +456,10 @@ def send_message(request, session_id):
         return JsonResponse({
             "success": True,
             "response": ai_response,
-            "timestamp": timezone.now().isoformat(),
+            "timestamp": assistant_message.timestamp.isoformat(),
             "extracted_data": extracted_data,
+            "user_message": serialize_message(chat_message, request),
+            "assistant_message": serialize_message(assistant_message, request),
         })
     except Exception as exc:
         return JsonResponse({
@@ -341,7 +472,11 @@ def send_message(request, session_id):
 def get_chat_session(request, session_id):
     """Get messages from a chat session."""
     chat_session = get_object_or_404(ChatSession, id=session_id, user=request.user)
-    messages = chat_session.messages.all().values("id", "role", "content", "timestamp").order_by("timestamp")
+    messages = (
+        chat_session.messages.all()
+        .prefetch_related('attachments')
+        .order_by("timestamp")
+    )
 
     extracted_data = None
     if hasattr(chat_session, "extracted_complaint"):
@@ -359,7 +494,7 @@ def get_chat_session(request, session_id):
                 if chat_session.generated_complaint_id else None
             ),
         },
-        "messages": list(messages),
+        "messages": [serialize_message(message, request) for message in messages],
         "extracted_data": extracted_data,
     })
 
@@ -367,7 +502,7 @@ def get_chat_session(request, session_id):
 @login_required(login_url="login")
 @require_http_methods(["POST"])
 def close_chat_session(request, session_id):
-    """Close a chat session and create a formal complaint if possible."""
+    """Close a chat session, create a formal complaint, and trigger automation."""
     chat_session = get_object_or_404(ChatSession, id=session_id, user=request.user)
 
     try:
@@ -390,6 +525,7 @@ def close_chat_session(request, session_id):
                 "error": "Need both a location and a complaint description before filing.",
             }, status=400)
 
+        newly_created = False
         if chat_session.generated_complaint_id:
             complaint = chat_session.generated_complaint
         else:
@@ -401,9 +537,45 @@ def close_chat_session(request, session_id):
                 description=description,
             )
             chat_session.generated_complaint = complaint
-            chat_session.is_active = False
-            chat_session.save(update_fields=["generated_complaint", "is_active", "updated_at"])
+            newly_created = True
 
+        chat_session.is_active = False
+        chat_session.save(update_fields=["generated_complaint", "is_active", "updated_at"])
+
+        attachments = list(
+            ChatAttachment.objects.filter(
+                message__chat_session=chat_session,
+                message__role='user',
+            ).select_related('message')
+        )
+
+        if not complaint.generated_docx_path or not complaint.generated_pdf_path:
+            document_service = ComplaintDocumentService()
+            generated_files = document_service.generate(
+                complaint=complaint,
+                extracted_complaint=extracted_complaint,
+                attachments=attachments,
+            )
+            complaint.generated_docx_path = generated_files['docx_path']
+            complaint.generated_pdf_path = generated_files['pdf_path']
+
+        email_message = ''
+        email_success = False
+        if not complaint.email_sent_at:
+            email_service = ComplaintEmailService()
+            email_success, email_message = email_service.send_complaint_confirmation(
+                complaint,
+                attachment_paths=[complaint.generated_docx_path, complaint.generated_pdf_path],
+            )
+            if email_success:
+                complaint.email_sent_at = timezone.now()
+                complaint.email_error = ''
+            else:
+                complaint.email_error = email_message
+
+        complaint.save(update_fields=['generated_docx_path', 'generated_pdf_path', 'email_sent_at', 'email_error', 'updated_at'])
+
+        if newly_created:
             try:
                 rag_service = get_rag_service()
                 summary = f"{complaint.category} complaint in {complaint.area}. {complaint.description}"
@@ -415,11 +587,25 @@ def close_chat_session(request, session_id):
             except Exception:
                 pass
 
+        status_message = "Complaint created successfully."
+        if complaint.generated_docx_path and complaint.generated_pdf_path:
+            status_message += " Application documents were generated."
+        if email_success:
+            status_message += " Confirmation email sent."
+        elif complaint.email_error:
+            status_message += f" Email was not sent: {complaint.email_error}"
+
         return JsonResponse({
             "success": True,
-            "message": "Complaint created successfully.",
+            "message": status_message,
             "complaint_id": complaint.id,
             "complaint_detail_url": reverse("complaint_detail", args=[complaint.id]),
+            "documents": {
+                "docx_available": bool(complaint.generated_docx_path),
+                "pdf_available": bool(complaint.generated_pdf_path),
+            },
+            "email_sent": bool(complaint.email_sent_at),
+            "email_error": complaint.email_error,
         })
     except Exception as exc:
         return JsonResponse({

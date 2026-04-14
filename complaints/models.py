@@ -1,8 +1,14 @@
 """Django models for the complaints system."""
 
+import os
+
 from django.db import models
 from django.contrib.auth.models import User
-from django.utils import timezone
+
+
+def chat_attachment_upload_to(instance, filename):
+    """Store chat images under a predictable media path."""
+    return os.path.join('chat_attachments', str(instance.message.chat_session_id), filename)
 
 
 class UserProfile(models.Model):
@@ -61,6 +67,10 @@ class Complaint(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
+    generated_docx_path = models.CharField(max_length=500, blank=True)
+    generated_pdf_path = models.CharField(max_length=500, blank=True)
+    email_sent_at = models.DateTimeField(null=True, blank=True)
+    email_error = models.TextField(blank=True)
     
     class Meta:
         ordering = ['-created_at']
@@ -136,6 +146,22 @@ class ChatMessage(models.Model):
     
     def __str__(self):
         return f"{self.role}: {self.content[:50]}"
+
+
+class ChatAttachment(models.Model):
+    """Uploaded media attached to a chat message."""
+
+    message = models.ForeignKey(ChatMessage, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to=chat_attachment_upload_to)
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100, blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['uploaded_at']
+
+    def __str__(self):
+        return f"Attachment for message #{self.message_id}: {self.original_name}"
 
 
 class ExtractedComplaint(models.Model):

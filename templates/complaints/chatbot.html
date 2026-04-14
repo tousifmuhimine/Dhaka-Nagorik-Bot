@@ -308,6 +308,37 @@
         color: #b42318;
     }
 
+    .attachment-gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .attachment-card {
+        display: block;
+        border-radius: 16px;
+        overflow: hidden;
+        border: 1px solid #dbe4ee;
+        background: #fff;
+        text-decoration: none;
+    }
+
+    .attachment-card img {
+        width: 100%;
+        height: 140px;
+        object-fit: cover;
+        display: block;
+    }
+
+    .attachment-card span {
+        display: block;
+        padding: 9px 10px;
+        font-size: 0.82rem;
+        color: #475569;
+        word-break: break-word;
+    }
+
     .composer {
         border-top: 1px solid #e2e8f0;
         padding: 18px 24px 24px;
@@ -329,6 +360,108 @@
         grid-template-columns: minmax(0, 1fr) auto;
         gap: 12px;
         align-items: end;
+    }
+
+    .composer-stack {
+        display: grid;
+        gap: 12px;
+    }
+
+    .composer-tools {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .tool-btn {
+        border: 1px solid #d7e0ea;
+        background: #fff;
+        color: #0f4c81;
+        border-radius: 999px;
+        padding: 10px 14px;
+        font-size: 0.88rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .tool-btn:hover {
+        transform: translateY(-1px);
+        border-color: #8fc0ef;
+        box-shadow: 0 10px 20px rgba(25, 118, 210, 0.12);
+    }
+
+    .emoji-picker {
+        display: none;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 8px;
+        padding: 12px;
+        border-radius: 16px;
+        border: 1px solid #d7e0ea;
+        background: #fff;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.1);
+    }
+
+    .emoji-picker.show {
+        display: grid;
+    }
+
+    .emoji-option {
+        border: none;
+        background: transparent;
+        font-size: 1.2rem;
+        cursor: pointer;
+        border-radius: 10px;
+        padding: 8px 0;
+    }
+
+    .emoji-option:hover {
+        background: #eff6ff;
+    }
+
+    .preview-strip {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .preview-card {
+        position: relative;
+        width: 88px;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid #d7e0ea;
+        background: #fff;
+    }
+
+    .preview-card img {
+        width: 100%;
+        height: 88px;
+        object-fit: cover;
+        display: block;
+    }
+
+    .preview-card button {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 22px;
+        height: 22px;
+        border: none;
+        border-radius: 999px;
+        background: rgba(15, 23, 42, 0.75);
+        color: #fff;
+        cursor: pointer;
+        font-size: 0.8rem;
+    }
+
+    .preview-card span {
+        display: block;
+        padding: 6px 8px 8px;
+        font-size: 0.72rem;
+        color: #475569;
+        word-break: break-word;
     }
 
     #message-input {
@@ -598,7 +731,16 @@
                     <span id="composer-state">Waiting for a session</span>
                 </div>
                 <form class="composer-form" id="composer-form">
-                    <textarea id="message-input" placeholder="Example: There has been a pothole in Dhanmondi 27 for two weeks and it is getting worse."></textarea>
+                    <div class="composer-stack">
+                        <div class="composer-tools">
+                            <button type="button" class="tool-btn" id="photo-btn">Add Photos</button>
+                            <button type="button" class="tool-btn" id="emoji-btn">Emoji</button>
+                            <input type="file" id="photo-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+                        </div>
+                        <div class="emoji-picker" id="emoji-picker"></div>
+                        <div class="preview-strip" id="preview-strip"></div>
+                        <textarea id="message-input" placeholder="Example: There has been a pothole in Dhanmondi 27 for two weeks and it is getting worse."></textarea>
+                    </div>
                     <button type="submit" class="send-btn" id="send-btn" disabled>Send Message</button>
                 </form>
             </div>
@@ -632,10 +774,18 @@
     const sessionList = document.getElementById("session-list");
     const newChatButton = document.getElementById("new-chat-btn");
     const finalizeButton = document.getElementById("finalize-btn");
+    const photoButton = document.getElementById("photo-btn");
+    const photoInput = document.getElementById("photo-input");
+    const emojiButton = document.getElementById("emoji-btn");
+    const emojiPicker = document.getElementById("emoji-picker");
+    const previewStrip = document.getElementById("preview-strip");
+
+    const emojiChoices = ["😀", "🙂", "😢", "😡", "🙏", "📍", "🚧", "💧", "⚠️", "🗑️", "🚰", "🛣️", "🚨", "🌧️", "🏥", "💡"];
 
     let currentSessionId = null;
     let isSending = false;
     let complaintDetailUrl = null;
+    let selectedPhotos = [];
 
     function getCookie(name) {
         let cookieValue = null;
@@ -689,6 +839,31 @@
     function autoResizeTextarea() {
         textarea.style.height = "56px";
         textarea.style.height = Math.min(textarea.scrollHeight, 160) + "px";
+    }
+
+    function revokePreviewUrls() {
+        selectedPhotos.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    }
+
+    function renderSelectedPhotos() {
+        previewStrip.innerHTML = "";
+        selectedPhotos.forEach((item, index) => {
+            const card = document.createElement("div");
+            card.className = "preview-card";
+            card.innerHTML = `
+                <button type="button" data-index="${index}">&times;</button>
+                <img src="${item.previewUrl}" alt="${escapeHtml(item.file.name)}">
+                <span>${escapeHtml(item.file.name)}</span>
+            `;
+            previewStrip.appendChild(card);
+        });
+    }
+
+    function clearSelectedPhotos() {
+        revokePreviewUrls();
+        selectedPhotos = [];
+        previewStrip.innerHTML = "";
+        photoInput.value = "";
     }
 
     function updateSessionHighlight() {
@@ -745,20 +920,59 @@
     }
 
     function addMessage(role, content, timestamp, extraClass = "") {
+        appendMessage({
+            role,
+            content,
+            timestamp,
+            attachments: [],
+        }, extraClass);
+    }
+
+    function renderAttachmentGallery(attachments) {
+        if (!Array.isArray(attachments) || !attachments.length) {
+            return "";
+        }
+
+        const cards = attachments.map((attachment) => {
+            const name = escapeHtml(attachment.name || "Attachment");
+            const url = escapeHtml(attachment.url || "#");
+            if ((attachment.content_type || "").startsWith("image/")) {
+                return `
+                    <a href="${url}" target="_blank" rel="noreferrer" class="attachment-card">
+                        <img src="${url}" alt="${name}">
+                        <span>${name}</span>
+                    </a>
+                `;
+            }
+            return `
+                <a href="${url}" target="_blank" rel="noreferrer" class="attachment-card">
+                    <span>${name}</span>
+                </a>
+            `;
+        }).join("");
+
+        return `<div class="attachment-gallery">${cards}</div>`;
+    }
+
+    function appendMessage(message, extraClass = "") {
         const welcomeCard = document.getElementById("welcome-card");
         if (welcomeCard) {
             welcomeCard.remove();
         }
 
         const row = document.createElement("div");
-        row.className = `message-row ${role}`;
+        row.className = `message-row ${message.role}`;
+        const bubbleHtml = message.content
+            ? `<div class="message-bubble ${message.role} ${extraClass}">${escapeHtml(message.content)}</div>`
+            : "";
         row.innerHTML = `
             <div class="message-stack">
                 <div class="message-meta">
-                    <span>${role === "user" ? "You" : "Assistant"}</span>
-                    <span>${formatTime(timestamp)}</span>
+                    <span>${message.role === "user" ? "You" : "Assistant"}</span>
+                    <span>${formatTime(message.timestamp)}</span>
                 </div>
-                <div class="message-bubble ${role} ${extraClass}">${escapeHtml(content)}</div>
+                ${bubbleHtml}
+                ${renderAttachmentGallery(message.attachments)}
             </div>
         `;
         messagesContainer.appendChild(row);
@@ -868,11 +1082,7 @@
             if (Array.isArray(data.messages) && data.messages.length) {
                 messagesContainer.innerHTML = "";
                 data.messages.forEach((message) => {
-                    addMessage(
-                        message.role === "assistant" ? "assistant" : "user",
-                        message.content,
-                        message.timestamp
-                    );
+                    appendMessage(message);
                 });
             }
 
@@ -953,6 +1163,7 @@
 
             clearMessages();
             renderExtractedData(null);
+            clearSelectedPhotos();
             setSessionMeta({
                 id: data.session_id,
                 title: data.title || "New Complaint Chat",
@@ -972,36 +1183,49 @@
         }
 
         const message = textarea.value.trim();
-        if (!message) {
+        if (!message && !selectedPhotos.length) {
             return;
         }
-
-        addMessage("user", message, new Date().toISOString());
-        textarea.value = "";
-        autoResizeTextarea();
         setSendingState(true);
 
         try {
-            const response = await fetch(`/chatbot/session/${currentSessionId}/message/`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": csrfToken
-                },
-                body: JSON.stringify({ message })
-            });
+            let response;
+            if (selectedPhotos.length) {
+                const formData = new FormData();
+                formData.append("message", message);
+                selectedPhotos.forEach((item) => formData.append("photos", item.file));
+                response = await fetch(`/chatbot/session/${currentSessionId}/message/`, {
+                    method: "POST",
+                    headers: {
+                        "X-CSRFToken": csrfToken
+                    },
+                    body: formData
+                });
+            } else {
+                response = await fetch(`/chatbot/session/${currentSessionId}/message/`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": csrfToken
+                    },
+                    body: JSON.stringify({ message })
+                });
+            }
 
             const data = await response.json();
             if (!response.ok || data.success === false) {
                 throw new Error(data.error || "The assistant could not answer that message.");
             }
 
-            addMessage("assistant", data.response, data.timestamp);
+            appendMessage(data.user_message);
+            appendMessage(data.assistant_message);
             renderExtractedData(data.extracted_data);
             setNotice("");
+            textarea.value = "";
+            autoResizeTextarea();
+            clearSelectedPhotos();
         } catch (error) {
-            addMessage("assistant", error.message, new Date().toISOString(), "error");
-            setNotice("The request reached the server, but the assistant could not complete it. This usually means the AI API keys are missing or invalid.");
+            setNotice(error.message);
         } finally {
             setSendingState(false);
         }
@@ -1012,6 +1236,61 @@
         if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             composerForm.requestSubmit();
+        }
+    });
+
+    previewStrip.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-index]");
+        if (!button) {
+            return;
+        }
+        const index = Number(button.dataset.index);
+        const [removed] = selectedPhotos.splice(index, 1);
+        if (removed) {
+            URL.revokeObjectURL(removed.previewUrl);
+        }
+        renderSelectedPhotos();
+    });
+
+    photoButton.addEventListener("click", () => {
+        photoInput.click();
+    });
+
+    photoInput.addEventListener("change", (event) => {
+        const incoming = Array.from(event.target.files || []);
+        incoming.forEach((file) => {
+            if (selectedPhotos.length >= 5) {
+                return;
+            }
+            selectedPhotos.push({
+                file,
+                previewUrl: URL.createObjectURL(file),
+            });
+        });
+        renderSelectedPhotos();
+    });
+
+    emojiChoices.forEach((emoji) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "emoji-option";
+        button.textContent = emoji;
+        button.addEventListener("click", () => {
+            textarea.value += emoji;
+            autoResizeTextarea();
+            textarea.focus();
+            emojiPicker.classList.remove("show");
+        });
+        emojiPicker.appendChild(button);
+    });
+
+    emojiButton.addEventListener("click", () => {
+        emojiPicker.classList.toggle("show");
+    });
+
+    document.addEventListener("click", (event) => {
+        if (!emojiPicker.contains(event.target) && event.target !== emojiButton) {
+            emojiPicker.classList.remove("show");
         }
     });
 

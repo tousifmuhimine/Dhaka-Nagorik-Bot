@@ -33,6 +33,47 @@
             <p class="text-gray-700">{{ complaint.description }}</p>
         </div>
 
+        {% if complaint.generated_docx_path or complaint.generated_pdf_path %}
+        <div class="mb-8">
+            <h2 class="text-xl font-bold mb-4">Generated Application Files</h2>
+            <div class="flex flex-wrap gap-3">
+                {% if complaint.generated_docx_path %}
+                <a href="{% url 'download_complaint_document' complaint.id 'docx' %}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+                    <i class="fas fa-file-word"></i> Download DOCX
+                </a>
+                {% endif %}
+                {% if complaint.generated_pdf_path %}
+                <a href="{% url 'download_complaint_document' complaint.id 'pdf' %}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 text-white hover:bg-slate-800">
+                    <i class="fas fa-file-pdf"></i> Download PDF
+                </a>
+                {% endif %}
+            </div>
+            <div class="mt-3 text-sm text-gray-600">
+                {% if complaint.email_sent_at %}
+                Confirmation email sent on {{ complaint.email_sent_at|date:"M d, Y H:i" }}.
+                {% elif complaint.email_error %}
+                Email delivery issue: {{ complaint.email_error }}
+                {% else %}
+                Email delivery has not been attempted yet.
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if evidence_images %}
+        <div class="mb-8">
+            <h2 class="text-xl font-bold mb-4">Photo Evidence</h2>
+            <div class="grid grid-cols-2 gap-4">
+                {% for image in evidence_images %}
+                <a href="{{ image.file.url }}" target="_blank" rel="noreferrer" class="block border rounded-xl overflow-hidden bg-gray-50">
+                    <img src="{{ image.file.url }}" alt="{{ image.original_name }}" class="w-full h-48 object-cover">
+                    <div class="p-3 text-sm text-gray-600">{{ image.original_name }}</div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         <div>
             <h2 class="text-xl font-bold mb-4">Updates</h2>
             {% if updates %}

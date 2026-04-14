@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import UserProfile, Complaint, ComplaintUpdate, ChatSession, ChatMessage, ExtractedComplaint
+from .models import UserProfile, Complaint, ComplaintUpdate, ChatSession, ChatMessage, ChatAttachment, ExtractedComplaint
 
 
 @admin.register(UserProfile)
@@ -14,7 +14,7 @@ class ComplaintAdmin(admin.ModelAdmin):
     list_display = ('id', 'citizen', 'category', 'thana', 'status', 'created_at')
     list_filter = ('status', 'category', 'created_at')
     search_fields = ('description', 'area', 'citizen__email')
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_at', 'updated_at', 'email_sent_at')
 
 
 @admin.register(ComplaintUpdate)
@@ -38,6 +38,14 @@ class ChatMessageAdmin(admin.ModelAdmin):
     list_filter = ('role', 'timestamp')
     search_fields = ('content', 'chat_session__title')
     readonly_fields = ('timestamp',)
+
+
+@admin.register(ChatAttachment)
+class ChatAttachmentAdmin(admin.ModelAdmin):
+    list_display = ('message', 'original_name', 'content_type', 'uploaded_at')
+    list_filter = ('content_type', 'uploaded_at')
+    search_fields = ('original_name', 'message__content')
+    readonly_fields = ('uploaded_at',)
 
 
 @admin.register(ExtractedComplaint)

@@ -1,12 +1,16 @@
 """Views for the complaints system."""
 
+from pathlib import Path
+
+from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.db.models import Q
-from .models import Complaint, ComplaintUpdate, UserProfile
+from django.http import FileResponse, Http404
+from .models import ChatAttachment, Complaint, ComplaintUpdate, UserProfile
 from .forms import SignUpForm, LoginForm, ComplaintForm, ComplaintUpdateForm
 
 
@@ -150,14 +154,55 @@ def complaint_detail(request, id):
             return redirect('complaint_detail', id=complaint.id)
     else:
         form = ComplaintUpdateForm() if (is_assigned or is_admin) else None
+
+    source_session = complaint.source_chat_sessions.first()
+    evidence_images = []
+    if source_session:
+        evidence_images = ChatAttachment.objects.filter(
+            message__chat_session=source_session,
+            message__role='user',
+            content_type__startswith='image/',
+        ).order_by('uploaded_at')
     
     context = {
         'complaint': complaint,
         'updates': complaint.updates.all(),
         'form': form,
         'can_update': is_assigned or is_admin,
+        'evidence_images': evidence_images,
     }
     return render(request, 'complaints/complaint_detail.html', context)
+
+
+@login_required(login_url='login')
+def download_complaint_document(request, id, fmt):
+    """Download generated complaint documents."""
+    complaint = get_object_or_404(Complaint, id=id)
+
+    is_owner = complaint.citizen == request.user
+    is_assigned = complaint.assigned_authority == request.user
+    is_admin = request.user.userprofile.role == 'admin'
+    if not (is_owner or is_assigned or is_admin):
+        raise Http404('Document not available')
+
+    if fmt == 'docx':
+        target_path = complaint.generated_docx_path
+    elif fmt == 'pdf':
+        target_path = complaint.generated_pdf_path
+    else:
+        raise Http404('Unknown document format')
+
+    if not target_path:
+        raise Http404('Document not available')
+
+    resolved = Path(target_path).resolve()
+    allowed_root = Path(settings.DOCUMENT_OUTPUT_DIR).resolve()
+    if allowed_root not in resolved.parents:
+        raise Http404('Document path is invalid')
+    if not resolved.exists():
+        raise Http404('Document file not found')
+
+    return FileResponse(open(resolved, 'rb'), as_attachment=True, filename=resolved.name)
 
 
 @login_required(login_url='login')

@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -123,3 +124,21 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = Path(os.getenv('LOCAL_STORAGE_PATH', BASE_DIR / 'storage'))
+DOCUMENT_OUTPUT_DIR = Path(os.getenv('DOCUMENT_OUTPUT_DIR', MEDIA_ROOT / 'generated_docs'))
+POLICY_DIRECTORY = Path(os.getenv('POLICY_DIRECTORY', BASE_DIR / '_archive'))
+
+ENABLE_EMAIL = os.getenv('ENABLE_EMAIL', 'false').lower() == 'true'
+ENABLE_TAVILY_SEARCH = os.getenv('ENABLE_TAVILY_SEARCH', 'false').lower() == 'true'
+ENABLE_ADVANCED_RAG = os.getenv('ENABLE_ADVANCED_RAG', 'false').lower() == 'true'
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.getenv('EMAIL_SMTP_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_SMTP_PORT', '587'))
+EMAIL_HOST_USER = os.getenv('EMAIL_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_PASSWORD', '')
+EMAIL_USE_TLS = True
+DEFAULT_FROM_EMAIL = os.getenv('EMAIL_SENDER', EMAIL_HOST_USER or 'noreply@example.com')
+EMAIL_FROM_NAME = os.getenv('EMAIL_FROM_NAME', 'Dhaka Nagorik Bot')

@@ -12,6 +12,7 @@ urlpatterns = [
     path('authority/', views.authority_dashboard, name='authority_dashboard'),
     path('admin/', views.admin_dashboard, name='admin_dashboard'),
     path('complaint/<int:id>/', views.complaint_detail, name='complaint_detail'),
+    path('complaint/<int:id>/document/<str:fmt>/', views.download_complaint_document, name='download_complaint_document'),
     
     # Chatbot URLs
     path('chatbot/', views_chatbot.chatbot_page, name='chatbot_page'),

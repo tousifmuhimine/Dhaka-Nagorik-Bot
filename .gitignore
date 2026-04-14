@@ -55,9 +55,13 @@ node_modules/
 package-lock.json
 yarn.lock
 
-# Old docs (deprecated)
-PHASE_*.md
-UPGRADE_*.md
-IMPLEMENTATION_*.md
-GAP_*.md
-README_DJANGO.md
+# Markdown files (except README)
+*.md
+!README.md
+
+# Old docs (deprecated - kept for reference)
+# PHASE_*.md
+# UPGRADE_*.md
+# IMPLEMENTATION_*.md
+# GAP_*.md
+# README_DJANGO.md
