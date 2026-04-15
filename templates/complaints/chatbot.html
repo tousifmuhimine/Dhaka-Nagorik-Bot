@@ -962,6 +962,28 @@
         notice.classList.add("show");
     }
 
+    async function readJsonResponse(response, fallbackMessage) {
+        const contentType = response.headers.get("content-type") || "";
+        const isJsonResponse = contentType.includes("application/json");
+
+        if (!isJsonResponse) {
+            const bodyText = await response.text();
+            const looksLikeHtml = bodyText.trim().startsWith("<");
+            throw new Error(
+                looksLikeHtml
+                    ? fallbackMessage
+                    : (bodyText.trim() || fallbackMessage)
+            );
+        }
+
+        const data = await response.json();
+        if (!response.ok || data.success === false) {
+            throw new Error(data.error || fallbackMessage);
+        }
+
+        return data;
+    }
+
     function setSendingState(sending) {
         isSending = sending;
         sendButton.disabled = sending || !currentSessionId;
@@ -1200,11 +1222,7 @@
             setNotice("");
             renderExtractedData(null);
             const response = await fetch(`/chatbot/session/${sessionId}/`);
-            const data = await response.json();
-
-            if (!response.ok || data.success === false) {
-                throw new Error(data.error || `Unable to load session ${sessionId}.`);
-            }
+            const data = await readJsonResponse(response, `Unable to load session ${sessionId}.`);
 
             upsertSessionButton(data.session);
             setSessionMeta(data.session);
@@ -1220,6 +1238,9 @@
             renderExtractedData(data.extracted_data);
             sessionStorage.setItem("chat_session_id", data.session.id);
         } catch (error) {
+            if (String(error.message || "").includes("Unable to load session")) {
+                sessionStorage.removeItem("chat_session_id");
+            }
             setNotice(error.message);
         }
     }
@@ -1245,10 +1266,7 @@
                 body: JSON.stringify({})
             });
 
-            const data = await response.json();
-            if (!response.ok || data.success === false) {
-                throw new Error(data.error || "Unable to create the complaint from this chat.");
-            }
+            const data = await readJsonResponse(response, "Unable to create the complaint from this chat.");
 
             complaintDetailUrl = data.complaint_detail_url || null;
             finalizeButton.textContent = complaintDetailUrl ? "Open Complaint" : "Create Complaint";
@@ -1281,10 +1299,7 @@
                 })
             });
 
-            const data = await response.json();
-            if (!response.ok || data.success === false) {
-                throw new Error(data.error || "Unable to create a new chat session.");
-            }
+            const data = await readJsonResponse(response, "Unable to create a new chat session.");
 
             upsertSessionButton(data.session);
 
@@ -1340,10 +1355,7 @@
                 });
             }
 
-            const data = await response.json();
-            if (!response.ok || data.success === false) {
-                throw new Error(data.error || "The assistant could not answer that message.");
-            }
+            const data = await readJsonResponse(response, "The assistant could not answer that message.");
 
             upsertSessionButton(data.session);
             setSessionMeta(data.session);
@@ -1445,6 +1457,9 @@
 
         if (defaultSessionId) {
             await loadSession(defaultSessionId);
+            if (!currentSessionId) {
+                await createNewSession();
+            }
         } else {
             await createNewSession();
         }

@@ -135,11 +135,11 @@
         </div>
         <div class="mt-3 text-sm app-muted">
             {% if complaint.email_sent_at %}
-            Confirmation email sent on {{ complaint.email_sent_at|date:"M d, Y H:i" }}.
+            Authority notification sent on {{ complaint.email_sent_at|date:"M d, Y H:i" }}.
             {% elif complaint.email_error %}
-            Email delivery issue: {{ complaint.email_error }}
+            Notification issue: {{ complaint.email_error }}
             {% else %}
-            Email delivery has not been attempted yet.
+            Complaint notifications have not been attempted yet.
             {% endif %}
         </div>
     </div>

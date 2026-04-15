@@ -1,23 +1,23 @@
 """Views for the chatbot functionality."""
 
 import json
+import logging
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import render
 from django.urls import reverse
-from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .models import ChatAttachment, ChatMessage, ChatSession, Complaint, ExtractedComplaint, log_complaint_activity
-from .services.document_service import ComplaintDocumentService
-from .services.email_service import ComplaintEmailService
+from .services.complaint_submission_service import generate_documents_and_notify
 from .services.groq_service import GroqService
 from .services.image_analysis_service import ImageAnalysisService
 from .services.rag_service import RAGService
 from .services.web_search_service import WebSearchService
 
 
+logger = logging.getLogger(__name__)
 MIN_MESSAGES_FOR_EXTRACTION = 2
 ALLOWED_IMAGE_TYPES = {
     'image/jpeg',
@@ -58,6 +58,18 @@ def serialize_chat_session(chat_session: ChatSession):
             if chat_session.generated_complaint_id else None
         ),
     }
+
+
+def get_user_chat_session_or_error(request, session_id):
+    """Return the user's chat session or a JSON 404 response."""
+    chat_session = ChatSession.objects.filter(id=session_id, user=request.user).first()
+    if chat_session:
+        return chat_session, None
+
+    return None, JsonResponse({
+        "success": False,
+        "error": "Chat session not found.",
+    }, status=404)
 
 
 def get_rag_service():
@@ -411,7 +423,9 @@ def create_chat_session(request):
 @require_http_methods(["POST"])
 def send_message(request, session_id):
     """Send a message in a chat session and get an AI response."""
-    chat_session = get_object_or_404(ChatSession, id=session_id, user=request.user)
+    chat_session, error_response = get_user_chat_session_or_error(request, session_id)
+    if error_response:
+        return error_response
 
     try:
         payload = extract_request_payload(request)
@@ -507,7 +521,10 @@ def send_message(request, session_id):
 @login_required(login_url="login")
 def get_chat_session(request, session_id):
     """Get messages from a chat session."""
-    chat_session = get_object_or_404(ChatSession, id=session_id, user=request.user)
+    chat_session, error_response = get_user_chat_session_or_error(request, session_id)
+    if error_response:
+        return error_response
+
     messages = (
         chat_session.messages.all()
         .prefetch_related('attachments')
@@ -530,7 +547,9 @@ def get_chat_session(request, session_id):
 @require_http_methods(["POST"])
 def close_chat_session(request, session_id):
     """Close a chat session, create a formal complaint, and trigger automation."""
-    chat_session = get_object_or_404(ChatSession, id=session_id, user=request.user)
+    chat_session, error_response = get_user_chat_session_or_error(request, session_id)
+    if error_response:
+        return error_response
 
     try:
         if not hasattr(chat_session, "extracted_complaint"):
@@ -582,31 +601,11 @@ def close_chat_session(request, session_id):
             ).select_related('message')
         )
 
-        if not complaint.generated_docx_path or not complaint.generated_pdf_path:
-            document_service = ComplaintDocumentService()
-            generated_files = document_service.generate(
-                complaint=complaint,
-                extracted_complaint=extracted_complaint,
-                attachments=attachments,
-            )
-            complaint.generated_docx_path = generated_files['docx_path']
-            complaint.generated_pdf_path = generated_files['pdf_path']
-
-        email_message = ''
-        email_success = False
-        if not complaint.email_sent_at:
-            email_service = ComplaintEmailService()
-            email_success, email_message = email_service.send_complaint_confirmation(
-                complaint,
-                attachment_paths=[complaint.generated_docx_path, complaint.generated_pdf_path],
-            )
-            if email_success:
-                complaint.email_sent_at = timezone.now()
-                complaint.email_error = ''
-            else:
-                complaint.email_error = email_message
-
-        complaint.save(update_fields=['generated_docx_path', 'generated_pdf_path', 'email_sent_at', 'email_error', 'updated_at'])
+        delivery_result = generate_documents_and_notify(
+            complaint,
+            extracted_complaint=extracted_complaint,
+            attachments=attachments,
+        )
 
         if newly_created:
             try:
@@ -623,10 +622,10 @@ def close_chat_session(request, session_id):
         status_message = "Complaint created successfully."
         if complaint.generated_docx_path and complaint.generated_pdf_path:
             status_message += " Application documents were generated."
-        if email_success:
-            status_message += " Confirmation email sent."
+        if delivery_result['authority_email_sent']:
+            status_message += " The assigned area authority was notified and a receipt copy was sent to you."
         elif complaint.email_error:
-            status_message += f" Email was not sent: {complaint.email_error}"
+            status_message += f" Notification issue: {complaint.email_error}"
 
         return JsonResponse({
             "success": True,
@@ -641,6 +640,7 @@ def close_chat_session(request, session_id):
             "email_error": complaint.email_error,
         })
     except Exception as exc:
+        logger.error(f"Unexpected error in close_chat_session: {str(exc)}", exc_info=True)
         return JsonResponse({
             "success": False,
             "error": str(exc),

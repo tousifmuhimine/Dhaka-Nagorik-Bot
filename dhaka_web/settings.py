@@ -128,8 +128,12 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = Path(os.getenv('LOCAL_STORAGE_PATH', BASE_DIR / 'storage'))
-DOCUMENT_OUTPUT_DIR = Path(os.getenv('DOCUMENT_OUTPUT_DIR', MEDIA_ROOT / 'generated_docs'))
+DOCUMENT_OUTPUT_DIR = Path(os.getenv('DOCUMENT_OUTPUT_DIR', str(MEDIA_ROOT / 'generated_docs')))
 POLICY_DIRECTORY = Path(os.getenv('POLICY_DIRECTORY', BASE_DIR / '_archive'))
+
+# Ensure directories exist
+MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+DOCUMENT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 ENABLE_EMAIL = os.getenv('ENABLE_EMAIL', 'false').lower() == 'true'
 ENABLE_TAVILY_SEARCH = os.getenv('ENABLE_TAVILY_SEARCH', 'false').lower() == 'true'
@@ -143,3 +147,37 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_PASSWORD', '')
 EMAIL_USE_TLS = True
 DEFAULT_FROM_EMAIL = os.getenv('EMAIL_SENDER', EMAIL_HOST_USER or 'noreply@example.com')
 EMAIL_FROM_NAME = os.getenv('EMAIL_FROM_NAME', 'Dhaka Nagorik Bot')
+
+# Logging Configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{levelname}] {asctime} {name} - {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'complaints': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'django.core.mail': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}

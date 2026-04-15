@@ -24,7 +24,7 @@
             <i class="fas fa-file-alt"></i> File New Complaint
         </h2>
 
-        <form method="post" class="space-y-4">
+        <form method="post" enctype="multipart/form-data" class="space-y-4">
             {% csrf_token %}
 
             <div>
@@ -45,6 +45,19 @@
             <div>
                 <label class="block text-sm font-medium mb-2 text-white/80">Description</label>
                 {{ form.description }}
+            </div>
+
+            <div>
+                <label for="manual-photo-input" class="block text-sm font-medium mb-2 text-white/80">Photo Evidence</label>
+                <input
+                    id="manual-photo-input"
+                    type="file"
+                    name="photos"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    multiple
+                    class="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white transition file:mr-4 file:rounded-xl file:border-0 file:bg-white/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-white/20"
+                >
+                <p class="mt-2 text-xs app-dim">Optional. You can attach up to 5 images, each up to 8 MB.</p>
             </div>
 
             <button type="submit" class="app-btn app-btn-primary w-full">

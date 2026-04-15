@@ -17,8 +17,10 @@ class ImageAnalysisService:
             raise ValueError("GROQ_API_KEY not found in environment variables")
         
         self.client = Groq(api_key=api_key)
-        # Groq supports vision models - using their latest
-        self.model = "llama-2-90b-vision-preview"
+        self.model = os.getenv(
+            "GROQ_VISION_MODEL",
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+        )
 
     def _encode_image_to_base64(self, image_path: str) -> str:
         """Convert image file to base64 string."""

@@ -14,8 +14,18 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .forms import ComplaintForm, ComplaintUpdateForm, LoginForm, SignUpForm
-from .models import ChatAttachment, Complaint, ComplaintUpdate, UserProfile, log_complaint_activity
+from .models import ChatAttachment, Complaint, ComplaintAttachment, ComplaintUpdate, UserProfile, log_complaint_activity
+from .services.complaint_submission_service import generate_documents_and_notify
 from .services.email_service import ComplaintEmailService
+
+ALLOWED_IMAGE_TYPES = {
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+}
+MAX_ATTACHMENTS_PER_COMPLAINT = 5
+MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024
 
 
 def _get_profile(user):
@@ -66,6 +76,19 @@ def _can_access_complaint(user, complaint):
         and profile.approval_status == 'approved'
         and _same_area(profile.thana, complaint.thana)
     )
+
+
+def _validate_complaint_attachments(uploaded_files):
+    """Validate direct image uploads for manual complaints."""
+    if len(uploaded_files) > MAX_ATTACHMENTS_PER_COMPLAINT:
+        return f'Please upload no more than {MAX_ATTACHMENTS_PER_COMPLAINT} photos.'
+
+    for uploaded in uploaded_files:
+        if uploaded.content_type not in ALLOWED_IMAGE_TYPES:
+            return f'{uploaded.name} is not a supported image type.'
+        if uploaded.size > MAX_ATTACHMENT_SIZE:
+            return f'{uploaded.name} is larger than 8 MB.'
+    return ''
 
 
 def home(request):
@@ -188,19 +211,43 @@ def citizen_dashboard(request):
     complaints = request.user.complaints.select_related('assigned_authority').all()
 
     if request.method == 'POST':
+        uploaded_files = request.FILES.getlist('photos')
         form = ComplaintForm(request.POST)
-        if form.is_valid():
+        attachment_error = _validate_complaint_attachments(uploaded_files)
+
+        if attachment_error:
+            messages.error(request, attachment_error)
+        elif form.is_valid():
             complaint = form.save(commit=False)
             complaint.citizen = request.user
             complaint.status = 'submitted'
             complaint.save()
+            attachments = []
+            for uploaded in uploaded_files:
+                attachments.append(ComplaintAttachment.objects.create(
+                    complaint=complaint,
+                    file=uploaded,
+                    original_name=uploaded.name,
+                    content_type=uploaded.content_type or '',
+                ))
             log_complaint_activity(
                 complaint,
                 'filed',
                 actor=request.user,
                 message='Complaint filed by citizen.',
             )
-            messages.success(request, 'Complaint filed successfully!')
+            delivery_result = generate_documents_and_notify(complaint, attachments=attachments)
+
+            if delivery_result['documents_generated'] and delivery_result['authority_email_sent']:
+                messages.success(request, 'Complaint filed successfully. It was routed to the assigned area authority, and a copy was sent to your email.')
+            elif delivery_result['documents_generated']:
+                messages.success(request, 'Complaint filed successfully. The DOCX/PDF files were generated for download.')
+                if delivery_result['email_error']:
+                    messages.warning(request, f"Complaint notifications were incomplete: {delivery_result['email_error']}")
+            else:
+                messages.success(request, 'Complaint filed successfully.')
+                if delivery_result['email_error']:
+                    messages.warning(request, delivery_result['email_error'])
             return redirect('citizen_dashboard')
     else:
         form = ComplaintForm()
@@ -268,13 +315,18 @@ def complaint_detail(request, id):
         form = ComplaintUpdateForm() if can_add_note else None
 
     source_session = complaint.source_chat_sessions.first()
-    evidence_images = []
+    evidence_images = list(
+        complaint.attachments.filter(content_type__startswith='image/').order_by('uploaded_at')
+    )
     if source_session:
-        evidence_images = ChatAttachment.objects.filter(
-            message__chat_session=source_session,
-            message__role='user',
-            content_type__startswith='image/',
-        ).order_by('uploaded_at')
+        evidence_images.extend(list(
+            ChatAttachment.objects.filter(
+                message__chat_session=source_session,
+                message__role='user',
+                content_type__startswith='image/',
+            ).order_by('uploaded_at')
+        ))
+    evidence_images.sort(key=lambda image: image.uploaded_at)
 
     context = {
         'complaint': complaint,

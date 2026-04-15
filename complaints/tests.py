@@ -3,13 +3,14 @@ import shutil
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from docx import Document as DocxDocument
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.test.utils import override_settings
 
-from .models import ChatAttachment, ChatMessage, ChatSession, Complaint, ComplaintActivity, ExtractedComplaint, UserProfile
+from .models import ChatAttachment, ChatMessage, ChatSession, Complaint, ComplaintActivity, ComplaintAttachment, ExtractedComplaint, UserProfile
 from .services.document_service import ComplaintDocumentService
 from .services.groq_service import GroqService
 
@@ -93,8 +94,8 @@ class ChatbotIntegrationTests(TestCase):
         self.assertEqual(extracted.area_thana, "Dhanmondi")
         self.assertEqual(extracted.policy_reference, "Dhaka Road Maintenance Policy")
 
-    @patch("complaints.views_chatbot.ComplaintEmailService")
-    @patch("complaints.views_chatbot.ComplaintDocumentService")
+    @patch("complaints.services.complaint_submission_service.ComplaintEmailService")
+    @patch("complaints.services.complaint_submission_service.ComplaintDocumentService")
     @patch("complaints.views_chatbot.get_rag_service")
     def test_close_chat_session_creates_complaint_once(
         self,
@@ -102,6 +103,18 @@ class ChatbotIntegrationTests(TestCase):
         mock_document_service,
         mock_email_service,
     ):
+        authority = User.objects.create_user(
+            username="mirpur.authority@example.com",
+            email="mirpur.authority@example.com",
+            password="Authority@1234",
+            first_name="Mirpur Authority",
+        )
+        UserProfile.objects.create(
+            user=authority,
+            role="authority",
+            thana="Mirpur",
+            approval_status="approved",
+        )
         session = ChatSession.objects.create(user=self.user, title="Water issue", language="en")
         ExtractedComplaint.objects.create(
             chat_session=session,
@@ -121,7 +134,8 @@ class ChatbotIntegrationTests(TestCase):
             "docx_path": "D:/Codes/Dhaka Nagorik Bot/generated_docs/complaint_1.docx",
             "pdf_path": "D:/Codes/Dhaka Nagorik Bot/generated_docs/complaint_1.pdf",
         }
-        mock_email_service.return_value.send_complaint_confirmation.return_value = (True, "")
+        mock_email_service.return_value.send_complaint_to_authority.return_value = (True, "")
+        mock_email_service.return_value.send_citizen_delivery_copy.return_value = (True, "")
 
         first_response = self.client.post(
             reverse("close_chat_session", args=[session.id]),
@@ -135,6 +149,7 @@ class ChatbotIntegrationTests(TestCase):
         self.assertFalse(session.is_active)
         self.assertEqual(Complaint.objects.count(), 1)
         complaint = Complaint.objects.get()
+        self.assertEqual(complaint.assigned_authority, authority)
         self.assertTrue(complaint.generated_docx_path.endswith(".docx"))
         self.assertTrue(complaint.generated_pdf_path.endswith(".pdf"))
         self.assertIsNotNone(complaint.email_sent_at)
@@ -151,7 +166,8 @@ class ChatbotIntegrationTests(TestCase):
             second_response.json()["complaint_id"],
         )
         mock_document_service.return_value.generate.assert_called_once()
-        mock_email_service.return_value.send_complaint_confirmation.assert_called_once()
+        mock_email_service.return_value.send_complaint_to_authority.assert_called_once()
+        mock_email_service.return_value.send_citizen_delivery_copy.assert_called_once()
 
     @patch("complaints.views_chatbot.WebSearchService")
     @patch("complaints.views_chatbot.GroqService")
@@ -203,6 +219,13 @@ class ChatbotIntegrationTests(TestCase):
         history = mock_groq.chat.call_args.kwargs["conversation_history"]
         self.assertIn("Attached photo evidence", history[-1]["content"])
 
+    def test_get_chat_session_returns_json_for_missing_session(self):
+        response = self.client.get(reverse("get_chat_session", args=[999999]))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response["Content-Type"], "application/json")
+        self.assertEqual(response.json()["error"], "Chat session not found.")
+
 
 class GroqServiceParsingTests(TestCase):
     def test_coerce_extraction_payload_handles_json_string_payload(self):
@@ -251,6 +274,14 @@ class ComplaintDocumentServiceTests(TestCase):
 
             self.assertTrue(Path(paths["docx_path"]).exists())
             self.assertTrue(Path(paths["pdf_path"]).exists())
+            doc_text = "\n".join(
+                paragraph.text.strip()
+                for paragraph in DocxDocument(paths["docx_path"]).paragraphs
+                if paragraph.text.strip()
+            )
+            self.assertIn('APPLICATION FOR CIVIC COMPLAINT RESOLUTION', doc_text)
+            self.assertIn('Subject:', doc_text)
+            self.assertIn('Sir/Madam,', doc_text)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -293,6 +324,70 @@ class AccessWorkflowTests(TestCase):
         self.assertEqual(profile.role, 'authority')
         self.assertEqual(profile.approval_status, 'pending')
         self.assertEqual(profile.thana, 'Mirpur')
+
+    @patch('complaints.services.complaint_submission_service.ComplaintEmailService')
+    @patch('complaints.services.complaint_submission_service.ComplaintDocumentService')
+    def test_citizen_dashboard_submission_generates_documents_and_email(
+        self,
+        mock_document_service,
+        mock_email_service,
+    ):
+        citizen = self._create_user_with_profile(
+            email='manual.citizen@example.com',
+            password='CitizenPass123!',
+            role='citizen',
+            first_name='Manual Citizen',
+        )
+        authority = self._create_user_with_profile(
+            email='dhanmondi.authority@example.com',
+            password='AuthorityPass123!',
+            role='authority',
+            first_name='Dhanmondi Authority',
+            thana='Dhanmondi',
+            department='Zone Office',
+            employee_id='AUTH-321',
+            phone_number='01711111111',
+            access_reason='Handles Dhanmondi complaints.',
+        )
+
+        mock_document_service.return_value.generate.return_value = {
+            'docx_path': 'D:/Codes/Dhaka Nagorik Bot/generated_docs/complaint_1.docx',
+            'pdf_path': 'D:/Codes/Dhaka Nagorik Bot/generated_docs/complaint_1.pdf',
+        }
+        mock_email_service.return_value.send_complaint_to_authority.return_value = (True, '')
+        mock_email_service.return_value.send_citizen_delivery_copy.return_value = (True, '')
+
+        self.client.login(username='manual.citizen@example.com', password='CitizenPass123!')
+        image = SimpleUploadedFile('pothole.jpg', b'fake-image-content', content_type='image/jpeg')
+        response = self.client.post(reverse('citizen_dashboard'), data={
+            'category': 'roads',
+            'thana': 'Dhanmondi',
+            'area': 'Road 27',
+            'description': 'A large pothole is blocking traffic.',
+            'photos': [image],
+        })
+
+        self.assertRedirects(response, reverse('citizen_dashboard'))
+        complaint = Complaint.objects.get(citizen=citizen)
+        self.assertEqual(complaint.assigned_authority, authority)
+        self.assertTrue(complaint.generated_docx_path.endswith('.docx'))
+        self.assertTrue(complaint.generated_pdf_path.endswith('.pdf'))
+        self.assertIsNotNone(complaint.email_sent_at)
+        self.assertEqual(complaint.email_error, '')
+        self.assertEqual(ComplaintAttachment.objects.filter(complaint=complaint).count(), 1)
+        self.assertTrue(
+            ComplaintActivity.objects.filter(
+                complaint=complaint,
+                event_type='filed',
+                actor=citizen,
+            ).exists()
+        )
+        mock_document_service.return_value.generate.assert_called_once()
+        generate_call = mock_document_service.return_value.generate.call_args.kwargs
+        self.assertEqual(len(generate_call['attachments']), 1)
+        self.assertEqual(generate_call['attachments'][0].original_name, 'pothole.jpg')
+        mock_email_service.return_value.send_complaint_to_authority.assert_called_once()
+        mock_email_service.return_value.send_citizen_delivery_copy.assert_called_once()
 
     def test_admin_can_approve_pending_access_request(self):
         admin_user = self._create_user_with_profile(

@@ -11,6 +11,11 @@ def chat_attachment_upload_to(instance, filename):
     return os.path.join('chat_attachments', str(instance.message.chat_session_id), filename)
 
 
+def complaint_attachment_upload_to(instance, filename):
+    """Store manual complaint images under a predictable media path."""
+    return os.path.join('complaint_attachments', str(instance.complaint_id), filename)
+
+
 class UserProfile(models.Model):
     """Extended user profile with role and location."""
 
@@ -229,6 +234,22 @@ class ChatAttachment(models.Model):
 
     def __str__(self):
         return f"Attachment for message #{self.message_id}: {self.original_name}"
+
+
+class ComplaintAttachment(models.Model):
+    """Uploaded media attached directly to a complaint."""
+
+    complaint = models.ForeignKey(Complaint, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to=complaint_attachment_upload_to)
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100, blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['uploaded_at']
+
+    def __str__(self):
+        return f"Attachment for complaint #{self.complaint_id}: {self.original_name}"
 
 
 class ExtractedComplaint(models.Model):
