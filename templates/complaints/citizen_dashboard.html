@@ -1,86 +1,92 @@
 {% extends 'complaints/base.html' %}
 
-{% block title %}Citizen Dashboard - Dhaka Civic Complaints{% endblock %}
+{% block title %}Citizen Dashboard - Dhaka Nagorik AI{% endblock %}
 
 {% block content %}
-<div class="grid grid-cols-3 gap-4 mb-8">
-    <div class="bg-white p-6 rounded-lg shadow">
-        <div class="text-gray-600 text-sm">Total Complaints</div>
-        <div class="text-3xl font-bold text-blue-600">{{ total }}</div>
+<div class="grid gap-4 mb-8 md:grid-cols-3">
+    <div class="app-surface rounded-3xl p-6">
+        <div class="app-kicker">Total Complaints</div>
+        <div class="mt-3 text-3xl font-bold text-white">{{ total }}</div>
     </div>
-    <div class="bg-white p-6 rounded-lg shadow">
-        <div class="text-gray-600 text-sm">Resolved</div>
-        <div class="text-3xl font-bold text-green-600">{{ resolved }}</div>
+    <div class="app-surface rounded-3xl p-6">
+        <div class="app-kicker">Resolved</div>
+        <div class="mt-3 text-3xl font-bold text-emerald-200">{{ resolved }}</div>
     </div>
-    <div class="bg-white p-6 rounded-lg shadow">
-        <div class="text-gray-600 text-sm">Pending</div>
-        <div class="text-3xl font-bold text-orange-600">{{ total|add:resolved|stringformat:"-d" }}</div>
+    <div class="app-surface rounded-3xl p-6">
+        <div class="app-kicker">Still Open</div>
+        <div class="mt-3 text-3xl font-bold text-amber-100">{{ pending_total }}</div>
     </div>
 </div>
 
-<div class="grid grid-cols-2 gap-8">
-    <!-- File Complaint Section -->
-    <div class="bg-white p-8 rounded-lg shadow">
-        <h2 class="text-2xl font-bold mb-6 text-blue-600">
+<div class="grid gap-8 xl:grid-cols-2">
+    <div class="app-surface rounded-[2rem] p-8">
+        <h2 class="app-panel-title text-2xl mb-6">
             <i class="fas fa-file-alt"></i> File New Complaint
         </h2>
-        
+
         <form method="post" class="space-y-4">
             {% csrf_token %}
-            
+
             <div>
-                <label class="block text-sm font-medium mb-2">Category</label>
+                <label class="block text-sm font-medium mb-2 text-white/80">Category</label>
                 {{ form.category }}
             </div>
 
             <div>
-                <label class="block text-sm font-medium mb-2">Thana</label>
+                <label class="block text-sm font-medium mb-2 text-white/80">Thana</label>
                 {{ form.thana }}
             </div>
 
             <div>
-                <label class="block text-sm font-medium mb-2">Area/Location</label>
+                <label class="block text-sm font-medium mb-2 text-white/80">Area / Location</label>
                 {{ form.area }}
             </div>
 
             <div>
-                <label class="block text-sm font-medium mb-2">Description</label>
+                <label class="block text-sm font-medium mb-2 text-white/80">Description</label>
                 {{ form.description }}
             </div>
 
-            <button type="submit" class="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700">
+            <button type="submit" class="app-btn app-btn-primary w-full">
                 <i class="fas fa-send"></i> Submit Complaint
             </button>
         </form>
     </div>
 
-    <!-- Complaints List -->
-    <div class="bg-white p-8 rounded-lg shadow">
-        <h2 class="text-2xl font-bold mb-6 text-blue-600">
+    <div class="app-surface rounded-[2rem] p-8">
+        <h2 class="app-panel-title text-2xl mb-6">
             <i class="fas fa-list"></i> Your Complaints
         </h2>
 
         {% if complaints %}
         <div class="space-y-3">
             {% for complaint in complaints %}
-            <a href="{% url 'complaint_detail' complaint.id %}" class="block p-4 bg-gray-50 border rounded-lg hover:bg-gray-100 transition">
-                <div class="flex justify-between items-start">
+            <a href="{% url 'complaint_detail' complaint.id %}" class="app-surface-soft block rounded-2xl p-4 transition hover:bg-white/10">
+                <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <div>
-                        <div class="font-medium text-gray-900">
+                        <div class="font-medium text-white">
                             Complaint #{{ complaint.id }} - {{ complaint.category|title }}
                         </div>
-                        <div class="text-sm text-gray-600">{{ complaint.area }}</div>
-                        <div class="text-xs text-gray-500 mt-1">{{ complaint.created_at|date:"M d, Y" }}</div>
+                        <div class="mt-1 text-sm app-muted">{{ complaint.area }}, {{ complaint.thana }}</div>
+                        <div class="mt-1 text-xs app-dim">Filed {{ complaint.created_at|date:"M d, Y H:i" }}</div>
+                        {% if complaint.assigned_authority %}
+                        <div class="mt-1 text-xs app-dim">Assigned authority: {{ complaint.assigned_authority.get_full_name|default:complaint.assigned_authority.email }}</div>
+                        {% endif %}
                     </div>
-                    <span class="px-3 py-1 text-xs font-medium rounded-full {% if complaint.status == 'resolved' %}bg-green-100 text-green-800{% elif complaint.status == 'in_progress' %}bg-blue-100 text-blue-800{% else %}bg-orange-100 text-orange-800{% endif %}">
-                        {{ complaint.status|title }}
-                    </span>
+                    <div class="text-left md:text-right">
+                        <span class="app-status px-3 py-1 text-xs font-medium rounded-full {% if complaint.status == 'resolved' %}app-status-resolved{% elif complaint.status == 'awaiting_citizen_confirmation' %}app-status-waiting{% elif complaint.status == 'acknowledged' %}app-status-active{% else %}app-status-default{% endif %}">
+                            {{ complaint.get_status_display }}
+                        </span>
+                        {% if complaint.status == 'awaiting_citizen_confirmation' %}
+                        <div class="mt-2 text-xs font-medium text-amber-100">Your confirmation is needed</div>
+                        {% endif %}
+                    </div>
                 </div>
             </a>
             {% endfor %}
         </div>
         {% else %}
-        <p class="text-gray-600 text-center py-8">No complaints filed yet.</p>
+        <p class="app-empty rounded-2xl px-6 py-8 text-center">No complaints filed yet.</p>
         {% endif %}
     </div>
 </div>

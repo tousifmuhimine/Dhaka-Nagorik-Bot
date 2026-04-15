@@ -43,14 +43,15 @@ class GroqService:
         Send the full conversation to Groq and get the next assistant message.
         """
         if not system_prompt:
-            system_prompt = """You are a helpful civic complaint assistant for Dhaka city.
+            system_prompt = """You are Dhaka Nagorik AI, the civic complaint assistant for Dhaka.
+Never introduce yourself using any other name.
 You help users file complaints about infrastructure, utilities, and public services.
 Be conversational, empathetic, and ask clarifying questions when needed.
 Support both Bangla and English. Extract key information from user messages:
 - Type of complaint (e.g., pothole, water leak, garbage, noise, etc.)
 - Location (thana/area in Dhaka)
 - Duration (how long has the issue existed)
-Be concise and friendly."""
+Be concise and friendly, and avoid long generic welcome speeches."""
 
         messages = [{"role": "system", "content": system_prompt}]
         if policy_context:

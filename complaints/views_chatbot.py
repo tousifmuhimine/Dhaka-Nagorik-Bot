@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from .models import ChatAttachment, ChatMessage, ChatSession, Complaint, ExtractedComplaint
+from .models import ChatAttachment, ChatMessage, ChatSession, Complaint, ExtractedComplaint, log_complaint_activity
 from .services.document_service import ComplaintDocumentService
 from .services.email_service import ComplaintEmailService
 from .services.groq_service import GroqService
@@ -27,6 +27,37 @@ ALLOWED_IMAGE_TYPES = {
 }
 MAX_ATTACHMENTS_PER_MESSAGE = 5
 MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024
+
+
+def build_chat_session_title(message: str, uploaded_files) -> str:
+    """Create a short GPT-style session title from the first user turn."""
+    cleaned = " ".join((message or "").split())
+    if not cleaned and uploaded_files:
+        return "Photo complaint"
+    if not cleaned:
+        return "New Chat"
+
+    max_length = 56
+    if len(cleaned) <= max_length:
+        return cleaned.rstrip(" .,:;!-")
+
+    shortened = cleaned[:max_length].rsplit(" ", 1)[0].strip()
+    return (shortened or cleaned[:max_length]).rstrip(" .,:;!-")
+
+
+def serialize_chat_session(chat_session: ChatSession):
+    """Convert a chat session to JSON used by the frontend."""
+    return {
+        "id": chat_session.id,
+        "title": chat_session.title,
+        "language": chat_session.language,
+        "updated_at": chat_session.updated_at.isoformat(),
+        "generated_complaint_id": chat_session.generated_complaint_id,
+        "complaint_detail_url": (
+            reverse("complaint_detail", args=[chat_session.generated_complaint_id])
+            if chat_session.generated_complaint_id else None
+        ),
+    }
 
 
 def get_rag_service():
@@ -357,7 +388,7 @@ def create_chat_session(request):
     try:
         data = json.loads(request.body or "{}")
         language = data.get("language", "en")
-        title = data.get("title", "New Complaint Chat")
+        title = data.get("title", "New Chat")
 
         chat_session = ChatSession.objects.create(
             user=request.user,
@@ -367,9 +398,7 @@ def create_chat_session(request):
 
         return JsonResponse({
             "success": True,
-            "session_id": chat_session.id,
-            "title": chat_session.title,
-            "language": chat_session.language,
+            "session": serialize_chat_session(chat_session),
         })
     except Exception as exc:
         return JsonResponse({
@@ -409,6 +438,10 @@ def send_message(request, session_id):
                 content_type=uploaded.content_type or '',
             )
 
+        if chat_session.title in {"New Complaint Chat", "New Chat"}:
+            chat_session.title = build_chat_session_title(user_message, uploaded_files)
+            chat_session.save(update_fields=["title", "updated_at"])
+
         # Build conversation history with automatic image analysis
         conversation_history = build_model_history(chat_session, include_image_analysis=True)
 
@@ -430,10 +463,12 @@ def send_message(request, session_id):
             )
         else:
             system_prompt = (
-                "You are a civic complaint assistant for Dhaka city. Help users file clear, "
-                "actionable complaints about infrastructure, utilities, and public services. "
-                "Use the retrieved policy context when it is relevant, and ask follow-up questions "
-                "when complaint type, location, or duration are still missing."
+                "You are Dhaka Nagorik AI, the civic complaint assistant for Dhaka. "
+                "Never introduce yourself using any other name. "
+                "Help users file clear, actionable complaints about infrastructure, utilities, "
+                "and public services. Use the retrieved policy context when it is relevant, and "
+                "ask follow-up questions when complaint type, location, or duration are still missing. "
+                "Be friendly and concise, and avoid long generic welcome speeches."
             )
 
         groq_service = GroqService()
@@ -460,6 +495,7 @@ def send_message(request, session_id):
             "extracted_data": extracted_data,
             "user_message": serialize_message(chat_message, request),
             "assistant_message": serialize_message(assistant_message, request),
+            "session": serialize_chat_session(chat_session),
         })
     except Exception as exc:
         return JsonResponse({
@@ -484,16 +520,7 @@ def get_chat_session(request, session_id):
 
     return JsonResponse({
         "success": True,
-        "session": {
-            "id": chat_session.id,
-            "title": chat_session.title,
-            "language": chat_session.language,
-            "generated_complaint_id": chat_session.generated_complaint_id,
-            "complaint_detail_url": (
-                reverse("complaint_detail", args=[chat_session.generated_complaint_id])
-                if chat_session.generated_complaint_id else None
-            ),
-        },
+        "session": serialize_chat_session(chat_session),
         "messages": [serialize_message(message, request) for message in messages],
         "extracted_data": extracted_data,
     })
@@ -535,6 +562,12 @@ def close_chat_session(request, session_id):
                 thana=area,
                 area=area,
                 description=description,
+            )
+            log_complaint_activity(
+                complaint,
+                'filed',
+                actor=request.user,
+                message='Complaint filed from the AI chat workflow.',
             )
             chat_session.generated_complaint = complaint
             newly_created = True

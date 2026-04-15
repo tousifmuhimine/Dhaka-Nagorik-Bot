@@ -1,68 +1,181 @@
-{% extends 'complaints/base.html' %}
+{% extends 'complaints/auth_layout.html' %}
 
-{% block title %}Sign Up - Dhaka Civic Complaints{% endblock %}
+{% block title %}Sign Up - Dhaka Nagorik AI{% endblock %}
 
-{% block main_class %}flex items-center justify-center min-h-screen bg-gradient-to-br from-green-600 to-green-800{% endblock %}
+{% block auth_badge %}New Account{% endblock %}
+{% block auth_heading %}Create your access{% endblock %}
+{% block auth_description %}Citizens can start right away. Authority and admin registrations include extra verification details and stay pending until an approved admin reviews them.{% endblock %}
 
-{% block content %}
-<div class="w-full max-w-md">
-    <div class="bg-white rounded-lg shadow-lg p-8">
-        <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-green-600 mb-2">
-                <i class="fas fa-user-plus"></i> Create Account
-            </h1>
-            <p class="text-gray-600">Join as a citizen to file complaints</p>
-        </div>
+{% block auth_form %}
+<form method="post" class="space-y-5">
+    {% csrf_token %}
 
-        <form method="post" class="space-y-4">
-            {% csrf_token %}
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-                {{ form.first_name }}
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                {{ form.email }}
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                {{ form.password1 }}
-                <p class="text-xs text-gray-500 mt-1">At least 8 characters</p>
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
-                {{ form.password2 }}
-            </div>
-
-            <button type="submit" class="w-full bg-green-600 text-white font-medium py-2 rounded-lg hover:bg-green-700 transition">
-                <i class="fas fa-user-plus"></i> Create Account
-            </button>
-        </form>
-
-        <div class="mt-6 pt-6 border-t text-center">
-            <p class="text-gray-600">
-                Already have an account? 
-                <a href="{% url 'login' %}" class="text-green-600 font-medium hover:underline">
-                    Login here
-                </a>
-            </p>
-        </div>
-
-        {% if form.errors %}
-        <div class="mt-4 p-4 bg-red-100 text-red-800 rounded-lg">
-            <ul>
-                {% for field, errors in form.errors.items %}
-                    {% for error in errors %}
-                    <li>{{ error }}</li>
-                    {% endfor %}
-                {% endfor %}
-            </ul>
-        </div>
+    <div>
+        <label class="mb-2 block text-sm font-medium text-white/80">Account Type</label>
+        {{ form.role }}
+        <p class="mt-2 text-xs leading-5 text-white/45">Choose citizen for direct access, or request authority/admin access for reviewed accounts.</p>
+        {% if form.role.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.role.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
         {% endif %}
     </div>
-</div>
+
+    <div>
+        <label class="mb-2 block text-sm font-medium text-white/80">Full Name</label>
+        {{ form.first_name }}
+        {% if form.first_name.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.first_name.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    <div data-role-field="authority">
+        <label class="mb-2 block text-sm font-medium text-white/80">Authorized Area / Thana</label>
+        {{ form.thana }}
+        <p class="mt-2 text-xs leading-5 text-white/45">Authority accounts only see complaints from this approved area.</p>
+        {% if form.thana.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.thana.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    <div data-role-field="authority admin">
+        <label class="mb-2 block text-sm font-medium text-white/80">Department / Office</label>
+        {{ form.department }}
+        {% if form.department.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.department.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    <div data-role-field="authority admin">
+        <label class="mb-2 block text-sm font-medium text-white/80">Employee / Government ID</label>
+        {{ form.employee_id }}
+        {% if form.employee_id.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.employee_id.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    <div data-role-field="authority admin">
+        <label class="mb-2 block text-sm font-medium text-white/80">Phone Number</label>
+        {{ form.phone_number }}
+        {% if form.phone_number.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.phone_number.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    <div data-role-field="authority admin">
+        <label class="mb-2 block text-sm font-medium text-white/80">Access Reason</label>
+        {{ form.access_reason }}
+        <p class="mt-2 text-xs leading-5 text-white/45">Briefly explain your civic responsibility, office, and why this access should be approved.</p>
+        {% if form.access_reason.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.access_reason.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    <div>
+        <label class="mb-2 block text-sm font-medium text-white/80">Email</label>
+        {{ form.email }}
+        {% if form.email.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.email.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    <div>
+        <label class="mb-2 block text-sm font-medium text-white/80">Password</label>
+        {{ form.password1 }}
+        <p class="mt-2 text-xs leading-5 text-white/45">Use at least 8 characters for a stronger account.</p>
+        {% if form.password1.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.password1.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    <div>
+        <label class="mb-2 block text-sm font-medium text-white/80">Confirm Password</label>
+        {{ form.password2 }}
+        {% if form.password2.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.password2.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    {% if form.non_field_errors %}
+    <div class="rounded-2xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-100">
+        {% for error in form.non_field_errors %}
+        <div>{{ error }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs leading-6 text-white/55">
+        Authority and admin accounts cannot log in until an approved admin confirms the request.
+    </div>
+
+    <button type="submit" class="auth-submit mt-2 w-full rounded-2xl px-4 py-4 text-sm font-bold uppercase tracking-[0.2em] transition">
+        Create Account
+    </button>
+</form>
+
+<p class="mt-6 text-center text-sm text-white/55">
+    Already registered?
+    <a href="{% url 'login' %}" class="font-semibold text-amber-100 transition hover:text-white">Login here</a>
+</p>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    (() => {
+        const roleField = document.getElementById('id_role');
+        const groups = document.querySelectorAll('[data-role-field]');
+        if (!roleField) {
+            return;
+        }
+
+        const syncFields = () => {
+            const role = roleField.value;
+            groups.forEach((group) => {
+                const allowedRoles = (group.dataset.roleField || '').split(' ').filter(Boolean);
+                group.classList.toggle('hidden', !allowedRoles.includes(role));
+            });
+        };
+
+        roleField.addEventListener('change', syncFields);
+        syncFields();
+    })();
+</script>
 {% endblock %}

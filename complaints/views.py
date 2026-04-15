@@ -3,30 +3,86 @@
 from pathlib import Path
 
 from django.conf import settings
-from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.contrib import messages
 from django.db.models import Q
 from django.http import FileResponse, Http404
-from .models import ChatAttachment, Complaint, ComplaintUpdate, UserProfile
-from .forms import SignUpForm, LoginForm, ComplaintForm, ComplaintUpdateForm
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
+
+from .forms import ComplaintForm, ComplaintUpdateForm, LoginForm, SignUpForm
+from .models import ChatAttachment, Complaint, ComplaintUpdate, UserProfile, log_complaint_activity
+from .services.email_service import ComplaintEmailService
+
+
+def _get_profile(user):
+    """Return the attached profile when available."""
+    return getattr(user, 'userprofile', None)
+
+
+def _normalize_area(value):
+    """Normalize area/thana text for comparisons."""
+    return (value or '').strip().casefold()
+
+
+def _same_area(left, right):
+    """Return True when two area strings refer to the same location."""
+    return _normalize_area(left) == _normalize_area(right)
+
+
+def _is_approved_admin(user):
+    """Return True when the user is an approved admin."""
+    profile = _get_profile(user)
+    return bool(
+        profile
+        and profile.role == 'admin'
+        and profile.approval_status == 'approved'
+    )
+
+
+def _is_approved_authority(user):
+    """Return True when the user is an approved authority."""
+    profile = _get_profile(user)
+    return bool(
+        profile
+        and profile.role == 'authority'
+        and profile.approval_status == 'approved'
+    )
+
+
+def _can_access_complaint(user, complaint):
+    """Return whether the given user can view the complaint."""
+    if complaint.citizen_id == user.id:
+        return True
+    if _is_approved_admin(user):
+        return True
+    profile = _get_profile(user)
+    return bool(
+        profile
+        and profile.role == 'authority'
+        and profile.approval_status == 'approved'
+        and _same_area(profile.thana, complaint.thana)
+    )
 
 
 def home(request):
     """Home page - redirect to dashboard if logged in."""
     if request.user.is_authenticated:
-        try:
-            profile = request.user.userprofile
+        profile = _get_profile(request.user)
+        if profile and profile.approval_status != 'approved':
+            logout(request)
+            messages.warning(request, 'Your account is waiting for admin approval.')
+            return redirect('login')
+        if profile:
             if profile.role == 'citizen':
                 return redirect('citizen_dashboard')
-            elif profile.role == 'authority':
+            if profile.role == 'authority':
                 return redirect('authority_dashboard')
-            elif profile.role == 'admin':
+            if profile.role == 'admin':
                 return redirect('admin_dashboard')
-        except UserProfile.DoesNotExist:
-            pass
     return redirect('login')
 
 
@@ -34,51 +90,84 @@ def signup(request):
     """User signup page."""
     if request.user.is_authenticated:
         return redirect('home')
-    
+
     if request.method == 'POST':
         form = SignUpForm(request.POST)
         if form.is_valid():
             user = form.save()
-            # Create citizen profile by default
-            UserProfile.objects.create(user=user, role='citizen')
-            messages.success(request, 'Account created successfully! Please log in.')
+            role = form.cleaned_data['role']
+            needs_approval = role in {'authority', 'admin'}
+            UserProfile.objects.create(
+                user=user,
+                role=role,
+                thana=(form.cleaned_data.get('thana') or '').strip() or None,
+                department=(form.cleaned_data.get('department') or '').strip(),
+                employee_id=(form.cleaned_data.get('employee_id') or '').strip(),
+                phone_number=(form.cleaned_data.get('phone_number') or '').strip(),
+                access_reason=(form.cleaned_data.get('access_reason') or '').strip(),
+                approval_status='pending' if needs_approval else 'approved',
+            )
+            if needs_approval:
+                messages.success(
+                    request,
+                    'Registration submitted. An approved admin must review your account before you can log in.',
+                )
+            else:
+                messages.success(request, 'Account created successfully! Please log in.')
             return redirect('login')
-        else:
-            for error in form.errors.values():
-                messages.error(request, error)
     else:
         form = SignUpForm()
-    
-    return render(request, 'complaints/signup.html', {'form': form})
+
+    return render(request, 'complaints/signup.html', {
+        'form': form,
+        'auth_mode': 'signup',
+    })
 
 
 def login_view(request):
     """User login page."""
     if request.user.is_authenticated:
         return redirect('home')
-    
+
     if request.method == 'POST':
         form = LoginForm(request.POST)
         if form.is_valid():
-            email = form.cleaned_data['email']
+            email = form.cleaned_data['email'].strip().lower()
             password = form.cleaned_data['password']
-            
+
             try:
-                user = User.objects.get(email=email)
-                user = authenticate(request, username=user.username, password=password)
-                
-                if user is not None:
-                    login(request, user)
-                    messages.success(request, f'Welcome, {user.first_name}!')
-                    return redirect('home')
-                else:
-                    messages.error(request, 'Invalid password.')
+                existing_user = User.objects.get(email__iexact=email)
             except User.DoesNotExist:
-                messages.error(request, 'Email not found.')
+                existing_user = None
+
+            if existing_user and not existing_user.is_active:
+                profile = _get_profile(existing_user)
+                if profile and profile.approval_status == 'pending':
+                    messages.warning(request, 'This account is waiting for admin approval.')
+                elif profile and profile.approval_status == 'rejected':
+                    messages.error(request, 'This signup request was rejected. Please contact an admin.')
+                else:
+                    messages.error(request, 'This account is inactive.')
+            else:
+                username = existing_user.username if existing_user else email
+                user = authenticate(request, username=username, password=password)
+                if user is not None:
+                    profile = _get_profile(user)
+                    if profile and profile.approval_status != 'approved':
+                        messages.warning(request, 'Your account is waiting for admin approval.')
+                    else:
+                        login(request, user)
+                        messages.success(request, f'Welcome, {user.first_name or user.username}!')
+                        return redirect('home')
+                else:
+                    messages.error(request, 'Invalid email or password.')
     else:
         form = LoginForm()
-    
-    return render(request, 'complaints/login.html', {'form': form})
+
+    return render(request, 'complaints/login.html', {
+        'form': form,
+        'auth_mode': 'login',
+    })
 
 
 def logout_view(request):
@@ -91,69 +180,92 @@ def logout_view(request):
 @login_required(login_url='login')
 def citizen_dashboard(request):
     """Citizen dashboard - file and track complaints."""
-    try:
-        profile = request.user.userprofile
-        if profile.role != 'citizen':
-            messages.error(request, 'You do not have access to this page.')
-            return redirect('home')
-    except UserProfile.DoesNotExist:
-        messages.error(request, 'User profile not found.')
-        return redirect('login')
-    
-    complaints = request.user.complaints.all()
-    
+    profile = _get_profile(request.user)
+    if not profile or profile.role != 'citizen':
+        messages.error(request, 'You do not have access to this page.')
+        return redirect('home')
+
+    complaints = request.user.complaints.select_related('assigned_authority').all()
+
     if request.method == 'POST':
         form = ComplaintForm(request.POST)
         if form.is_valid():
             complaint = form.save(commit=False)
             complaint.citizen = request.user
+            complaint.status = 'submitted'
             complaint.save()
+            log_complaint_activity(
+                complaint,
+                'filed',
+                actor=request.user,
+                message='Complaint filed by citizen.',
+            )
             messages.success(request, 'Complaint filed successfully!')
             return redirect('citizen_dashboard')
     else:
         form = ComplaintForm()
-    
+
     context = {
         'form': form,
         'complaints': complaints,
         'total': complaints.count(),
         'resolved': complaints.filter(status='resolved').count(),
+        'pending_total': complaints.exclude(status='resolved').count(),
     }
     return render(request, 'complaints/citizen_dashboard.html', context)
 
 
 @login_required(login_url='login')
 def complaint_detail(request, id):
-    """View complaint details and updates."""
-    complaint = get_object_or_404(Complaint, id=id)
-    
-    # Check permissions
-    is_owner = complaint.citizen == request.user
-    is_assigned = complaint.assigned_authority == request.user
-    is_admin = request.user.userprofile.role == 'admin'
-    
-    if not (is_owner or is_assigned or is_admin):
+    """View complaint details, timeline, and notes."""
+    complaint = get_object_or_404(
+        Complaint.objects.select_related('citizen', 'assigned_authority'),
+        id=id,
+    )
+    if not _can_access_complaint(request.user, complaint):
         messages.error(request, 'You do not have permission to view this complaint.')
         return redirect('home')
-    
-    # Add update
-    if request.method == 'POST' and (is_assigned or is_admin):
+
+    profile = _get_profile(request.user)
+    is_owner = complaint.citizen_id == request.user.id
+    is_admin = bool(profile and profile.role == 'admin' and profile.approval_status == 'approved')
+    is_area_authority = bool(
+        profile
+        and profile.role == 'authority'
+        and profile.approval_status == 'approved'
+        and _same_area(profile.thana, complaint.thana)
+    )
+    is_assigned_authority = complaint.assigned_authority_id == request.user.id
+
+    can_add_note = is_owner or is_admin or is_area_authority
+    can_acknowledge = (
+        is_area_authority
+        and complaint.status == 'submitted'
+        and (
+            complaint.assigned_authority_id is None
+            or complaint.assigned_authority_id == request.user.id
+        )
+    )
+    can_mark_resolved = is_assigned_authority and complaint.status in {'acknowledged', 'in_progress'}
+    can_confirm_resolution = is_owner and complaint.status == 'awaiting_citizen_confirmation'
+
+    if request.method == 'POST' and can_add_note:
         form = ComplaintUpdateForm(request.POST)
         if form.is_valid():
             update = form.save(commit=False)
             update.complaint = complaint
             update.updated_by = request.user
             update.save()
-            
-            # Update status if changed
-            if update.status_change:
-                complaint.status = update.status_change
-                complaint.save()
-            
-            messages.success(request, 'Update added successfully!')
+            log_complaint_activity(
+                complaint,
+                'note_added',
+                actor=request.user,
+                message=update.message,
+            )
+            messages.success(request, 'Update added successfully.')
             return redirect('complaint_detail', id=complaint.id)
     else:
-        form = ComplaintUpdateForm() if (is_assigned or is_admin) else None
+        form = ComplaintUpdateForm() if can_add_note else None
 
     source_session = complaint.source_chat_sessions.first()
     evidence_images = []
@@ -163,12 +275,16 @@ def complaint_detail(request, id):
             message__role='user',
             content_type__startswith='image/',
         ).order_by('uploaded_at')
-    
+
     context = {
         'complaint': complaint,
-        'updates': complaint.updates.all(),
+        'updates': complaint.updates.select_related('updated_by').all(),
+        'activities': complaint.activities.select_related('actor').all(),
         'form': form,
-        'can_update': is_assigned or is_admin,
+        'can_add_note': can_add_note,
+        'can_acknowledge': can_acknowledge,
+        'can_mark_resolved': can_mark_resolved,
+        'can_confirm_resolution': can_confirm_resolution,
         'evidence_images': evidence_images,
     }
     return render(request, 'complaints/complaint_detail.html', context)
@@ -179,10 +295,7 @@ def download_complaint_document(request, id, fmt):
     """Download generated complaint documents."""
     complaint = get_object_or_404(Complaint, id=id)
 
-    is_owner = complaint.citizen == request.user
-    is_assigned = complaint.assigned_authority == request.user
-    is_admin = request.user.userprofile.role == 'admin'
-    if not (is_owner or is_assigned or is_admin):
+    if not _can_access_complaint(request.user, complaint):
         raise Http404('Document not available')
 
     if fmt == 'docx':
@@ -208,24 +321,24 @@ def download_complaint_document(request, id, fmt):
 @login_required(login_url='login')
 def authority_dashboard(request):
     """Authority dashboard - manage assigned complaints."""
-    try:
-        profile = request.user.userprofile
-        if profile.role != 'authority':
-            messages.error(request, 'You do not have access to this page.')
-            return redirect('home')
-    except UserProfile.DoesNotExist:
-        messages.error(request, 'User profile not found.')
-        return redirect('login')
-    
-    complaints = Complaint.objects.filter(thana=profile.thana)
-    assigned = request.user.assigned_complaints.all()
-    
+    profile = _get_profile(request.user)
+    if not profile or profile.role != 'authority' or profile.approval_status != 'approved':
+        messages.error(request, 'You do not have access to this page.')
+        return redirect('home')
+
+    complaints = Complaint.objects.filter(thana__iexact=profile.thana).select_related(
+        'citizen',
+        'assigned_authority',
+    )
+    assigned = complaints.filter(assigned_authority=request.user)
+
     context = {
         'complaints': complaints,
         'assigned': assigned,
         'thana': profile.thana,
         'total': complaints.count(),
-        'pending': complaints.filter(status__in=['submitted', 'under_review']).count(),
+        'pending': complaints.exclude(status='resolved').count(),
+        'awaiting_confirmation': complaints.filter(status='awaiting_citizen_confirmation').count(),
     }
     return render(request, 'complaints/authority_dashboard.html', context)
 
@@ -233,40 +346,252 @@ def authority_dashboard(request):
 @login_required(login_url='login')
 def admin_dashboard(request):
     """Admin dashboard - manage all complaints and users."""
-    try:
-        profile = request.user.userprofile
-        if profile.role != 'admin':
-            messages.error(request, 'You do not have access to this page.')
-            return redirect('home')
-    except UserProfile.DoesNotExist:
-        messages.error(request, 'User profile not found.')
-        return redirect('login')
-    
-    complaints = Complaint.objects.all()
+    profile = _get_profile(request.user)
+    if not profile or profile.role != 'admin' or profile.approval_status != 'approved':
+        messages.error(request, 'You do not have access to this page.')
+        return redirect('home')
+
+    complaints = Complaint.objects.select_related('citizen', 'assigned_authority').all()
     users = User.objects.all()
-    
-    # Search
-    search = request.GET.get('search')
+
+    search = request.GET.get('search', '').strip()
     if search:
         complaints = complaints.filter(
-            Q(description__icontains=search) |
-            Q(area__icontains=search) |
-            Q(citizen__first_name__icontains=search)
+            Q(description__icontains=search)
+            | Q(area__icontains=search)
+            | Q(thana__icontains=search)
+            | Q(citizen__first_name__icontains=search)
+            | Q(citizen__email__icontains=search)
         )
-    
-    # Filter by status
-    status = request.GET.get('status')
+
+    status = request.GET.get('status', '').strip()
     if status:
         complaints = complaints.filter(status=status)
-    
+
+    pending_requests = UserProfile.objects.filter(
+        role__in=['authority', 'admin'],
+        approval_status='pending',
+    ).select_related('user').order_by('created_at')
+
     context = {
         'complaints': complaints,
         'users': users,
+        'pending_requests': pending_requests,
         'total_complaints': Complaint.objects.count(),
         'total_users': users.count(),
         'resolved': Complaint.objects.filter(status='resolved').count(),
-        'pending': Complaint.objects.filter(status__in=['submitted', 'under_review']).count(),
+        'pending': Complaint.objects.exclude(status='resolved').count(),
+        'awaiting_confirmation': Complaint.objects.filter(status='awaiting_citizen_confirmation').count(),
         'search': search,
         'status': status,
     }
     return render(request, 'complaints/admin_dashboard.html', context)
+
+
+@login_required(login_url='login')
+@require_POST
+def approve_access_request(request, profile_id):
+    """Approve a pending authority/admin signup."""
+    if not _is_approved_admin(request.user):
+        messages.error(request, 'You do not have access to this action.')
+        return redirect('home')
+
+    profile = get_object_or_404(UserProfile.objects.select_related('user'), id=profile_id)
+    if profile.role == 'citizen':
+        messages.error(request, 'Citizen accounts do not require approval.')
+        return redirect('admin_dashboard')
+
+    profile.approval_status = 'approved'
+    profile.approved_by = request.user
+    profile.approved_at = timezone.now()
+    profile.rejected_at = None
+    profile.save(update_fields=['approval_status', 'approved_by', 'approved_at', 'rejected_at', 'updated_at'])
+
+    profile.user.is_active = True
+    profile.user.save(update_fields=['is_active'])
+
+    messages.success(request, f'{profile.user.email} has been approved.')
+    return redirect('admin_dashboard')
+
+
+@login_required(login_url='login')
+@require_POST
+def reject_access_request(request, profile_id):
+    """Reject a pending authority/admin signup."""
+    if not _is_approved_admin(request.user):
+        messages.error(request, 'You do not have access to this action.')
+        return redirect('home')
+
+    profile = get_object_or_404(UserProfile.objects.select_related('user'), id=profile_id)
+    if profile.role == 'citizen':
+        messages.error(request, 'Citizen accounts do not require approval.')
+        return redirect('admin_dashboard')
+
+    profile.approval_status = 'rejected'
+    profile.approved_by = None
+    profile.approved_at = None
+    profile.rejected_at = timezone.now()
+    profile.save(update_fields=['approval_status', 'approved_by', 'approved_at', 'rejected_at', 'updated_at'])
+
+    profile.user.is_active = False
+    profile.user.save(update_fields=['is_active'])
+
+    messages.success(request, f'{profile.user.email} has been rejected.')
+    return redirect('admin_dashboard')
+
+
+@login_required(login_url='login')
+@require_POST
+def acknowledge_complaint(request, id):
+    """Allow an area authority to acknowledge a complaint."""
+    complaint = get_object_or_404(Complaint, id=id)
+    profile = _get_profile(request.user)
+    if not (
+        profile
+        and profile.role == 'authority'
+        and profile.approval_status == 'approved'
+        and _same_area(profile.thana, complaint.thana)
+    ):
+        messages.error(request, 'You do not have access to acknowledge this complaint.')
+        return redirect('home')
+
+    if complaint.assigned_authority_id and complaint.assigned_authority_id != request.user.id:
+        messages.error(request, 'This complaint is already acknowledged by another authority.')
+        return redirect('complaint_detail', id=complaint.id)
+
+    complaint.assigned_authority = request.user
+    complaint.status = 'acknowledged'
+    complaint.acknowledged_at = timezone.now()
+    complaint.save(update_fields=['assigned_authority', 'status', 'acknowledged_at', 'updated_at'])
+    log_complaint_activity(
+        complaint,
+        'acknowledged',
+        actor=request.user,
+        message=f'Acknowledged for {complaint.thana}.',
+    )
+
+    messages.success(request, 'Complaint acknowledged successfully.')
+    return redirect('complaint_detail', id=complaint.id)
+
+
+@login_required(login_url='login')
+@require_POST
+def request_resolution_confirmation(request, id):
+    """Mark the complaint as solved and wait for citizen confirmation."""
+    complaint = get_object_or_404(Complaint, id=id)
+    profile = _get_profile(request.user)
+    if not (
+        profile
+        and profile.role == 'authority'
+        and profile.approval_status == 'approved'
+        and complaint.assigned_authority_id == request.user.id
+    ):
+        messages.error(request, 'Only the assigned authority can submit resolution for confirmation.')
+        return redirect('home')
+
+    if complaint.status not in {'acknowledged', 'in_progress'}:
+        messages.error(request, 'This complaint cannot be marked solved yet.')
+        return redirect('complaint_detail', id=complaint.id)
+
+    complaint.status = 'awaiting_citizen_confirmation'
+    complaint.resolution_requested_at = timezone.now()
+    complaint.resolved_at = None
+    complaint.save(update_fields=['status', 'resolution_requested_at', 'resolved_at', 'updated_at'])
+    log_complaint_activity(
+        complaint,
+        'resolution_requested',
+        actor=request.user,
+        message='Authority marked the complaint as solved and requested citizen confirmation.',
+    )
+
+    messages.success(request, 'Resolution submitted. The citizen must confirm before the complaint is closed.')
+    return redirect('complaint_detail', id=complaint.id)
+
+
+@login_required(login_url='login')
+@require_POST
+def confirm_resolution(request, id):
+    """Allow the citizen to confirm the authority's resolution."""
+    complaint = get_object_or_404(Complaint, id=id)
+    if complaint.citizen_id != request.user.id:
+        messages.error(request, 'Only the reporting citizen can confirm this resolution.')
+        return redirect('home')
+
+    if complaint.status != 'awaiting_citizen_confirmation':
+        messages.error(request, 'This complaint is not waiting for citizen confirmation.')
+        return redirect('complaint_detail', id=complaint.id)
+
+    now = timezone.now()
+    complaint.status = 'resolved'
+    complaint.citizen_confirmed_at = now
+    complaint.resolved_at = now
+    complaint.save(update_fields=['status', 'citizen_confirmed_at', 'resolved_at', 'updated_at'])
+    log_complaint_activity(
+        complaint,
+        'citizen_confirmed',
+        actor=request.user,
+        message='Citizen confirmed the complaint has been resolved.',
+    )
+
+    messages.success(request, 'Thank you. The complaint is now marked as resolved.')
+    return redirect('complaint_detail', id=complaint.id)
+
+
+@login_required(login_url='login')
+@require_POST
+def reopen_resolution(request, id):
+    """Allow the citizen to reject the submitted resolution."""
+    complaint = get_object_or_404(Complaint, id=id)
+    if complaint.citizen_id != request.user.id:
+        messages.error(request, 'Only the reporting citizen can reopen this complaint.')
+        return redirect('home')
+
+    if complaint.status != 'awaiting_citizen_confirmation':
+        messages.error(request, 'This complaint is not waiting for citizen confirmation.')
+        return redirect('complaint_detail', id=complaint.id)
+
+    complaint.status = 'acknowledged'
+    complaint.resolution_requested_at = None
+    complaint.citizen_confirmed_at = None
+    complaint.resolved_at = None
+    complaint.save(update_fields=['status', 'resolution_requested_at', 'citizen_confirmed_at', 'resolved_at', 'updated_at'])
+    log_complaint_activity(
+        complaint,
+        'citizen_reopened',
+        actor=request.user,
+        message='Citizen requested more work before closing the complaint.',
+    )
+
+    messages.warning(request, 'The complaint has been reopened for the assigned authority.')
+    return redirect('complaint_detail', id=complaint.id)
+
+
+@login_required(login_url='login')
+@require_POST
+def remind_assigned_authority(request, id):
+    """Send an email reminder for an unresolved complaint."""
+    if not _is_approved_admin(request.user):
+        messages.error(request, 'You do not have access to this action.')
+        return redirect('home')
+
+    complaint = get_object_or_404(Complaint.objects.select_related('assigned_authority'), id=id)
+    if complaint.status == 'resolved':
+        messages.error(request, 'Resolved complaints do not need reminders.')
+        return redirect('admin_dashboard')
+
+    service = ComplaintEmailService()
+    sent, error_message = service.send_authority_reminder(complaint)
+    if sent:
+        complaint.last_reminder_sent_at = timezone.now()
+        complaint.save(update_fields=['last_reminder_sent_at', 'updated_at'])
+        log_complaint_activity(
+            complaint,
+            'reminder_sent',
+            actor=request.user,
+            message='Admin sent a reminder email to the assigned authority.',
+        )
+        messages.success(request, 'Reminder email sent to the assigned authority.')
+    else:
+        messages.error(request, error_message)
+
+    return redirect('admin_dashboard')

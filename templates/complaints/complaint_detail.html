@@ -1,119 +1,233 @@
 {% extends 'complaints/base.html' %}
 
-{% block title %}Complaint Details - Dhaka Civic Complaints{% endblock %}
+{% block title %}Complaint Details - Dhaka Nagorik AI{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl mx-auto">
-    <div class="bg-white rounded-lg shadow p-8">
-        <h1 class="text-3xl font-bold mb-6">Complaint #{{ complaint.id }}</h1>
-        
-        <div class="grid grid-cols-2 gap-4 mb-8 pb-8 border-b">
+<div class="max-w-5xl mx-auto space-y-8">
+    <div class="app-surface rounded-[2rem] p-8">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-                <div class="text-gray-600 text-sm">Category</div>
-                <div class="font-bold">{{ complaint.category|title }}</div>
+                <h1 class="app-panel-title text-3xl">Complaint #{{ complaint.id }}</h1>
+                <p class="mt-2 text-sm app-muted">{{ complaint.area }}, {{ complaint.thana }}</p>
             </div>
-            <div>
-                <div class="text-gray-600 text-sm">Status</div>
-                <span class="px-3 py-1 rounded-full text-sm font-medium {% if complaint.status == 'resolved' %}bg-green-100 text-green-800{% elif complaint.status == 'in_progress' %}bg-blue-100 text-blue-800{% else %}bg-orange-100 text-orange-800{% endif %}">
-                    {{ complaint.status|title }}
+            <div class="text-left lg:text-right">
+                <div class="text-sm app-dim mb-2">Current Status</div>
+                <span class="app-status px-3 py-1 rounded-full text-sm font-medium {% if complaint.status == 'resolved' %}app-status-resolved{% elif complaint.status == 'awaiting_citizen_confirmation' %}app-status-waiting{% elif complaint.status == 'acknowledged' %}app-status-active{% else %}app-status-default{% endif %}">
+                    {{ complaint.get_status_display }}
                 </span>
             </div>
-            <div>
-                <div class="text-gray-600 text-sm">Thana</div>
-                <div class="font-bold">{{ complaint.thana }}</div>
+        </div>
+
+        <div class="grid gap-4 mt-8 md:grid-cols-2 xl:grid-cols-4">
+            <div class="app-surface-soft rounded-xl p-4">
+                <div class="app-kicker">Filed</div>
+                <div class="mt-2 font-semibold text-white">{{ complaint.created_at|date:"M d, Y H:i" }}</div>
             </div>
-            <div>
-                <div class="text-gray-600 text-sm">Area</div>
-                <div class="font-bold">{{ complaint.area }}</div>
+            <div class="app-surface-soft rounded-xl p-4">
+                <div class="app-kicker">Acknowledged</div>
+                <div class="mt-2 font-semibold text-white">{% if complaint.acknowledged_at %}{{ complaint.acknowledged_at|date:"M d, Y H:i" }}{% else %}Not yet{% endif %}</div>
+            </div>
+            <div class="app-surface-soft rounded-xl p-4">
+                <div class="app-kicker">Solved By Authority</div>
+                <div class="mt-2 font-semibold text-white">{% if complaint.resolution_requested_at %}{{ complaint.resolution_requested_at|date:"M d, Y H:i" }}{% else %}Not yet{% endif %}</div>
+            </div>
+            <div class="app-surface-soft rounded-xl p-4">
+                <div class="app-kicker">Citizen Confirmed</div>
+                <div class="mt-2 font-semibold text-white">{% if complaint.citizen_confirmed_at %}{{ complaint.citizen_confirmed_at|date:"M d, Y H:i" }}{% else %}Pending{% endif %}</div>
             </div>
         </div>
 
-        <div class="mb-8">
-            <h2 class="text-xl font-bold mb-4">Description</h2>
-            <p class="text-gray-700">{{ complaint.description }}</p>
+        <div class="grid gap-8 mt-8 lg:grid-cols-[1.15fr_0.85fr]">
+            <div>
+                <h2 class="app-panel-title text-xl mb-3">Description</h2>
+                <p class="app-muted whitespace-pre-line">{{ complaint.description }}</p>
+            </div>
+            <div class="app-surface-soft rounded-xl p-5">
+                <h2 class="app-panel-title text-xl mb-4">Case Overview</h2>
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="app-dim">Category</dt>
+                        <dd class="font-semibold text-white">{{ complaint.category|title }}</dd>
+                    </div>
+                    <div>
+                        <dt class="app-dim">Citizen</dt>
+                        <dd class="font-semibold text-white">{{ complaint.citizen.get_full_name|default:complaint.citizen.username }}</dd>
+                    </div>
+                    <div>
+                        <dt class="app-dim">Assigned Authority</dt>
+                        <dd class="font-semibold text-white">
+                            {% if complaint.assigned_authority %}
+                            {{ complaint.assigned_authority.get_full_name|default:complaint.assigned_authority.username }}
+                            {% else %}
+                            Not assigned yet
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="app-dim">Reminder Email</dt>
+                        <dd class="font-semibold text-white">
+                            {% if complaint.last_reminder_sent_at %}
+                            {{ complaint.last_reminder_sent_at|date:"M d, Y H:i" }}
+                            {% else %}
+                            None sent
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
         </div>
 
-        {% if complaint.generated_docx_path or complaint.generated_pdf_path %}
-        <div class="mb-8">
-            <h2 class="text-xl font-bold mb-4">Generated Application Files</h2>
+        {% if can_acknowledge or can_mark_resolved or can_confirm_resolution %}
+        <div class="app-surface-soft mt-8 rounded-xl p-5">
+            <h2 class="app-panel-title text-lg mb-4">Next Action</h2>
             <div class="flex flex-wrap gap-3">
-                {% if complaint.generated_docx_path %}
-                <a href="{% url 'download_complaint_document' complaint.id 'docx' %}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
-                    <i class="fas fa-file-word"></i> Download DOCX
-                </a>
+                {% if can_acknowledge %}
+                <form method="post" action="{% url 'acknowledge_complaint' complaint.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="app-btn app-btn-secondary text-sm">
+                        Acknowledge Complaint
+                    </button>
+                </form>
                 {% endif %}
-                {% if complaint.generated_pdf_path %}
-                <a href="{% url 'download_complaint_document' complaint.id 'pdf' %}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 text-white hover:bg-slate-800">
-                    <i class="fas fa-file-pdf"></i> Download PDF
-                </a>
+
+                {% if can_mark_resolved %}
+                <form method="post" action="{% url 'request_resolution_confirmation' complaint.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="app-btn app-btn-success text-sm">
+                        Mark as Solved
+                    </button>
+                </form>
                 {% endif %}
-            </div>
-            <div class="mt-3 text-sm text-gray-600">
-                {% if complaint.email_sent_at %}
-                Confirmation email sent on {{ complaint.email_sent_at|date:"M d, Y H:i" }}.
-                {% elif complaint.email_error %}
-                Email delivery issue: {{ complaint.email_error }}
-                {% else %}
-                Email delivery has not been attempted yet.
+
+                {% if can_confirm_resolution %}
+                <form method="post" action="{% url 'confirm_resolution' complaint.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="app-btn app-btn-success text-sm">
+                        Approve Resolution
+                    </button>
+                </form>
+                <form method="post" action="{% url 'reopen_resolution' complaint.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="app-btn app-btn-warn text-sm">
+                        Need More Work
+                    </button>
+                </form>
                 {% endif %}
             </div>
         </div>
         {% endif %}
+    </div>
 
-        {% if evidence_images %}
-        <div class="mb-8">
-            <h2 class="text-xl font-bold mb-4">Photo Evidence</h2>
-            <div class="grid grid-cols-2 gap-4">
-                {% for image in evidence_images %}
-                <a href="{{ image.file.url }}" target="_blank" rel="noreferrer" class="block border rounded-xl overflow-hidden bg-gray-50">
-                    <img src="{{ image.file.url }}" alt="{{ image.original_name }}" class="w-full h-48 object-cover">
-                    <div class="p-3 text-sm text-gray-600">{{ image.original_name }}</div>
-                </a>
-                {% endfor %}
-            </div>
+    {% if complaint.generated_docx_path or complaint.generated_pdf_path %}
+    <div class="app-surface rounded-[2rem] p-8">
+        <h2 class="app-panel-title text-xl mb-4">Generated Application Files</h2>
+        <div class="flex flex-wrap gap-3">
+            {% if complaint.generated_docx_path %}
+            <a href="{% url 'download_complaint_document' complaint.id 'docx' %}" class="app-btn app-btn-primary inline-flex items-center gap-2">
+                <i class="fas fa-file-word"></i> Download DOCX
+            </a>
+            {% endif %}
+            {% if complaint.generated_pdf_path %}
+            <a href="{% url 'download_complaint_document' complaint.id 'pdf' %}" class="app-btn app-btn-secondary inline-flex items-center gap-2">
+                <i class="fas fa-file-pdf"></i> Download PDF
+            </a>
+            {% endif %}
         </div>
-        {% endif %}
+        <div class="mt-3 text-sm app-muted">
+            {% if complaint.email_sent_at %}
+            Confirmation email sent on {{ complaint.email_sent_at|date:"M d, Y H:i" }}.
+            {% elif complaint.email_error %}
+            Email delivery issue: {{ complaint.email_error }}
+            {% else %}
+            Email delivery has not been attempted yet.
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 
-        <div>
-            <h2 class="text-xl font-bold mb-4">Updates</h2>
-            {% if updates %}
+    {% if evidence_images %}
+    <div class="app-surface rounded-[2rem] p-8">
+        <h2 class="app-panel-title text-xl mb-4">Photo Evidence</h2>
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {% for image in evidence_images %}
+            <a href="{{ image.file.url }}" target="_blank" rel="noreferrer" class="app-surface-soft block rounded-xl overflow-hidden">
+                <img src="{{ image.file.url }}" alt="{{ image.original_name }}" class="w-full h-48 object-cover">
+                <div class="p-3 text-sm app-muted">{{ image.original_name }}</div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid gap-8 xl:grid-cols-2">
+        <div class="app-surface rounded-[2rem] p-8">
+            <h2 class="app-panel-title text-xl mb-4">Activity Timeline</h2>
+            {% if activities %}
             <div class="space-y-4">
-                {% for update in updates %}
-                <div class="bg-gray-50 p-4 rounded-lg border-l-4 border-blue-600">
-                    <div class="flex justify-between items-start">
+                {% for activity in activities %}
+                <div class="app-surface-soft rounded-xl p-4">
+                    <div class="flex items-start justify-between gap-4">
                         <div>
-                            <div class="font-medium">{{ update.updated_by.first_name }}</div>
-                            <div class="text-sm text-gray-600 mt-1">{{ update.message }}</div>
+                            <div class="font-semibold text-white">{{ activity.get_event_type_display }}</div>
+                            <div class="text-sm app-muted mt-1">
+                                {% if activity.actor %}
+                                {{ activity.actor.get_full_name|default:activity.actor.username }}
+                                {% else %}
+                                System
+                                {% endif %}
+                            </div>
+                            {% if activity.message %}
+                            <div class="text-sm app-muted mt-2">{{ activity.message }}</div>
+                            {% endif %}
                         </div>
-                        <div class="text-xs text-gray-500">{{ update.created_at|date:"M d, Y H:i" }}</div>
+                        <div class="text-xs app-dim whitespace-nowrap">{{ activity.created_at|date:"M d, Y H:i" }}</div>
                     </div>
                 </div>
                 {% endfor %}
             </div>
             {% else %}
-            <p class="text-gray-600">No updates yet.</p>
+            <p class="app-empty rounded-2xl px-6 py-8">No activity has been logged yet.</p>
             {% endif %}
         </div>
 
-        {% if can_update %}
-        <div class="mt-8 pt-8 border-t">
-            <h2 class="text-xl font-bold mb-4">Add Update</h2>
-            <form method="post" class="space-y-4">
-                {% csrf_token %}
-                <div>
-                    <label class="block text-sm font-medium mb-2">Message</label>
-                    {{ form.message }}
+        <div class="space-y-8">
+            <div class="app-surface rounded-[2rem] p-8">
+                <h2 class="app-panel-title text-xl mb-4">Notes & Updates</h2>
+                {% if updates %}
+                <div class="space-y-4">
+                    {% for update in updates %}
+                    <div class="app-surface-soft rounded-lg border-l-4 border-cyan-200/50 p-4">
+                        <div class="flex justify-between items-start gap-4">
+                            <div>
+                                <div class="font-medium text-white">{{ update.updated_by.first_name|default:update.updated_by.username }}</div>
+                                <div class="text-sm app-muted mt-1">{{ update.message }}</div>
+                            </div>
+                            <div class="text-xs app-dim whitespace-nowrap">{{ update.created_at|date:"M d, Y H:i" }}</div>
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2">Change Status</label>
-                    {{ form.status_change }}
-                </div>
-                <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">
-                    Submit Update
-                </button>
-            </form>
+                {% else %}
+                <p class="app-empty rounded-2xl px-6 py-8">No notes yet.</p>
+                {% endif %}
+            </div>
+
+            {% if can_add_note %}
+            <div class="app-surface rounded-[2rem] p-8">
+                <h2 class="app-panel-title text-xl mb-4">Add Note</h2>
+                <form method="post" class="space-y-4">
+                    {% csrf_token %}
+                    <div>
+                        <label class="block text-sm font-medium mb-2 text-white/80">Message</label>
+                        {{ form.message }}
+                    </div>
+                    <button type="submit" class="app-btn app-btn-primary">
+                        Save Note
+                    </button>
+                </form>
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 </div>
 {% endblock %}

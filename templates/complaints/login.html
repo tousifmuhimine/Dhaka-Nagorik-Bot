@@ -1,69 +1,50 @@
-{% extends 'complaints/base.html' %}
+{% extends 'complaints/auth_layout.html' %}
 
-{% block title %}Login - Dhaka Civic Complaints{% endblock %}
+{% block title %}Login - Dhaka Nagorik AI{% endblock %}
 
-{% block main_class %}flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-600 to-blue-800{% endblock %}
+{% block auth_badge %}Returning User{% endblock %}
+{% block auth_heading %}Welcome back{% endblock %}
+{% block auth_description %}Citizens, approved authorities, and approved admins can log in here to continue with complaint tracking and civic workflow actions.{% endblock %}
 
-{% block content %}
-<div class="w-full max-w-md">
-    <div class="bg-white rounded-lg shadow-lg p-8">
-        <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-blue-600 mb-2">
-                <i class="fas fa-sign-in-alt"></i> Login
-            </h1>
-            <p class="text-gray-600">Access the Civic Complaints System</p>
-        </div>
+{% block auth_form %}
+<form method="post" class="space-y-5">
+    {% csrf_token %}
 
-        {% if messages %}
-            <div class="mb-4 space-y-2">
-                {% for message in messages %}
-                    <div class="p-4 rounded-lg {% if 'error' in message.tags %}bg-red-100 text-red-800{% elif 'success' in message.tags %}bg-green-100 text-green-800{% else %}bg-blue-100 text-blue-800{% endif %}">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            </div>
+    <div>
+        <label class="mb-2 block text-sm font-medium text-white/80">Email</label>
+        {{ form.email }}
+        {% if form.email.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.email.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
         {% endif %}
-
-        <form method="post" class="space-y-6">
-            {% csrf_token %}
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                {{ form.email }}
-                {% if form.email.errors %}
-                    <ul class="mt-1 text-sm text-red-600">
-                        {% for error in form.email.errors %}
-                            <li>• {{ error }}</li>
-                        {% endfor %}
-                    </ul>
-                {% endif %}
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                {{ form.password }}
-                {% if form.password.errors %}
-                    <ul class="mt-1 text-sm text-red-600">
-                        {% for error in form.password.errors %}
-                            <li>• {{ error }}</li>
-                        {% endfor %}
-                    </ul>
-                {% endif %}
-            </div>
-
-            <button type="submit" class="w-full bg-blue-600 text-white font-medium py-2 rounded-lg hover:bg-blue-700 transition">
-                <i class="fas fa-sign-in-alt"></i> Login
-            </button>
-        </form>
-
-        <div class="mt-6 pt-6 border-t text-center">
-            <p class="text-gray-600">
-                Don't have an account? 
-                <a href="{% url 'signup' %}" class="text-blue-600 font-medium hover:underline">
-                    Sign up here
-                </a>
-            </p>
-        </div>
     </div>
-</div>
+
+    <div>
+        <label class="mb-2 block text-sm font-medium text-white/80">Password</label>
+        {{ form.password }}
+        {% if form.password.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.password.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    <button type="submit" class="auth-submit mt-2 w-full rounded-2xl px-4 py-4 text-sm font-bold uppercase tracking-[0.2em] transition">
+        Login
+    </button>
+</form>
+
+<p class="mt-6 text-center text-sm text-white/55">
+    Need an account?
+    <a href="{% url 'signup' %}" class="font-semibold text-emerald-200 transition hover:text-white">Create one now</a>
+</p>
+
+<p class="mt-3 text-center text-xs leading-5 text-white/40">
+    Authority and admin signups stay locked until an approved admin reviews the request.
+</p>
 {% endblock %}

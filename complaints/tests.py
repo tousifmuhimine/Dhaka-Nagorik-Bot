@@ -9,7 +9,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.test.utils import override_settings
 
-from .models import ChatAttachment, ChatMessage, ChatSession, Complaint, ExtractedComplaint
+from .models import ChatAttachment, ChatMessage, ChatSession, Complaint, ComplaintActivity, ExtractedComplaint, UserProfile
 from .services.document_service import ComplaintDocumentService
 from .services.groq_service import GroqService
 
@@ -253,3 +253,181 @@ class ComplaintDocumentServiceTests(TestCase):
             self.assertTrue(Path(paths["pdf_path"]).exists())
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+class AccessWorkflowTests(TestCase):
+    def _create_user_with_profile(self, *, email, password, role, first_name, **profile_kwargs):
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            password=password,
+            first_name=first_name,
+            is_active=profile_kwargs.pop('is_active', True),
+        )
+        profile_defaults = {
+            'role': role,
+            'approval_status': profile_kwargs.pop('approval_status', 'approved'),
+        }
+        profile_defaults.update(profile_kwargs)
+        UserProfile.objects.create(user=user, **profile_defaults)
+        return user
+
+    def test_authority_signup_creates_pending_inactive_account(self):
+        response = self.client.post(reverse('signup'), data={
+            'role': 'authority',
+            'first_name': 'Area Officer',
+            'thana': 'Mirpur',
+            'department': 'Zone Office',
+            'employee_id': 'AUTH-123',
+            'phone_number': '01700000000',
+            'access_reason': 'I manage complaints for Mirpur.',
+            'email': 'authority@example.com',
+            'password1': 'SecurePass123!',
+            'password2': 'SecurePass123!',
+        })
+
+        self.assertRedirects(response, reverse('login'))
+        user = User.objects.get(email='authority@example.com')
+        profile = user.userprofile
+        self.assertFalse(user.is_active)
+        self.assertEqual(profile.role, 'authority')
+        self.assertEqual(profile.approval_status, 'pending')
+        self.assertEqual(profile.thana, 'Mirpur')
+
+    def test_admin_can_approve_pending_access_request(self):
+        admin_user = self._create_user_with_profile(
+            email='admin@example.com',
+            password='AdminPass123!',
+            role='admin',
+            first_name='Admin',
+        )
+        pending_user = self._create_user_with_profile(
+            email='pending.authority@example.com',
+            password='PendingPass123!',
+            role='authority',
+            first_name='Pending',
+            approval_status='pending',
+            thana='Banani',
+            department='Ward Office',
+            employee_id='AUTH-009',
+            phone_number='01800000000',
+            access_reason='Need access to review Banani complaints.',
+            is_active=False,
+        )
+
+        self.client.login(username='admin@example.com', password='AdminPass123!')
+        response = self.client.post(reverse('approve_access_request', args=[pending_user.userprofile.id]))
+
+        self.assertRedirects(response, reverse('admin_dashboard'))
+        pending_user.refresh_from_db()
+        pending_user.userprofile.refresh_from_db()
+        self.assertTrue(pending_user.is_active)
+        self.assertEqual(pending_user.userprofile.approval_status, 'approved')
+        self.assertEqual(pending_user.userprofile.approved_by, admin_user)
+        self.assertIsNotNone(pending_user.userprofile.approved_at)
+
+    def test_authority_resolution_requires_citizen_confirmation(self):
+        citizen = self._create_user_with_profile(
+            email='citizen.workflow@example.com',
+            password='CitizenPass123!',
+            role='citizen',
+            first_name='Citizen',
+        )
+        authority = self._create_user_with_profile(
+            email='authority.workflow@example.com',
+            password='AuthorityPass123!',
+            role='authority',
+            first_name='Authority',
+            thana='Uttara',
+            department='Uttara Office',
+            employee_id='AUTH-777',
+            phone_number='01900000000',
+            access_reason='Uttara authority access.',
+        )
+        complaint = Complaint.objects.create(
+            citizen=citizen,
+            category='roads',
+            thana='Uttara',
+            area='Sector 7',
+            description='Large pothole in front of the school.',
+        )
+
+        self.client.login(username='authority.workflow@example.com', password='AuthorityPass123!')
+        response = self.client.post(reverse('acknowledge_complaint', args=[complaint.id]))
+        self.assertRedirects(response, reverse('complaint_detail', args=[complaint.id]))
+
+        complaint.refresh_from_db()
+        self.assertEqual(complaint.status, 'acknowledged')
+        self.assertEqual(complaint.assigned_authority, authority)
+        self.assertIsNotNone(complaint.acknowledged_at)
+
+        response = self.client.post(reverse('request_resolution_confirmation', args=[complaint.id]))
+        self.assertRedirects(response, reverse('complaint_detail', args=[complaint.id]))
+        complaint.refresh_from_db()
+        self.assertEqual(complaint.status, 'awaiting_citizen_confirmation')
+        self.assertIsNotNone(complaint.resolution_requested_at)
+
+        self.client.logout()
+        self.client.login(username='citizen.workflow@example.com', password='CitizenPass123!')
+        response = self.client.post(reverse('confirm_resolution', args=[complaint.id]))
+        self.assertRedirects(response, reverse('complaint_detail', args=[complaint.id]))
+
+        complaint.refresh_from_db()
+        self.assertEqual(complaint.status, 'resolved')
+        self.assertIsNotNone(complaint.citizen_confirmed_at)
+        self.assertIsNotNone(complaint.resolved_at)
+        self.assertEqual(
+            list(ComplaintActivity.objects.filter(complaint=complaint).values_list('event_type', flat=True)),
+            ['acknowledged', 'resolution_requested', 'citizen_confirmed'],
+        )
+
+    @patch('complaints.views.ComplaintEmailService')
+    def test_admin_reminder_email_updates_timestamp(self, mock_email_service):
+        admin_user = self._create_user_with_profile(
+            email='mail.admin@example.com',
+            password='AdminPass123!',
+            role='admin',
+            first_name='Admin',
+        )
+        citizen = self._create_user_with_profile(
+            email='mail.citizen@example.com',
+            password='CitizenPass123!',
+            role='citizen',
+            first_name='Citizen',
+        )
+        authority = self._create_user_with_profile(
+            email='mail.authority@example.com',
+            password='AuthorityPass123!',
+            role='authority',
+            first_name='Authority',
+            thana='Gulshan',
+            department='Gulshan Office',
+            employee_id='AUTH-555',
+            phone_number='01600000000',
+            access_reason='Handles Gulshan complaints.',
+        )
+        complaint = Complaint.objects.create(
+            citizen=citizen,
+            category='water',
+            thana='Gulshan',
+            area='Road 10',
+            description='Water leak is flooding the road.',
+            status='acknowledged',
+            assigned_authority=authority,
+        )
+
+        mock_email_service.return_value.send_authority_reminder.return_value = (True, '')
+
+        self.client.login(username='mail.admin@example.com', password='AdminPass123!')
+        response = self.client.post(reverse('remind_assigned_authority', args=[complaint.id]))
+
+        self.assertRedirects(response, reverse('admin_dashboard'))
+        complaint.refresh_from_db()
+        self.assertIsNotNone(complaint.last_reminder_sent_at)
+        self.assertTrue(
+            ComplaintActivity.objects.filter(
+                complaint=complaint,
+                event_type='reminder_sent',
+                actor=admin_user,
+            ).exists()
+        )

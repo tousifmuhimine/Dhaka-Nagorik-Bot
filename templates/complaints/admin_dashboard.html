@@ -1,71 +1,96 @@
 {% extends 'complaints/base.html' %}
 
-{% block title %}Admin Dashboard - Dhaka Civic Complaints{% endblock %}
+{% block title %}Admin Dashboard - Dhaka Nagorik AI{% endblock %}
 
 {% block content %}
-<div class="grid grid-cols-4 gap-4 mb-8">
-    <div class="bg-white p-6 rounded-lg shadow">
-        <div class="text-gray-600 text-sm">Total Complaints</div>
-        <div class="text-3xl font-bold text-blue-600">{{ total_complaints }}</div>
+<div class="grid gap-4 mb-8 md:grid-cols-2 xl:grid-cols-5">
+    <div class="app-surface rounded-3xl p-6">
+        <div class="app-kicker">Total Complaints</div>
+        <div class="mt-3 text-3xl font-bold text-white">{{ total_complaints }}</div>
     </div>
-    <div class="bg-white p-6 rounded-lg shadow">
-        <div class="text-gray-600 text-sm">Resolved</div>
-        <div class="text-3xl font-bold text-green-600">{{ resolved }}</div>
+    <div class="app-surface rounded-3xl p-6">
+        <div class="app-kicker">Resolved</div>
+        <div class="mt-3 text-3xl font-bold text-emerald-200">{{ resolved }}</div>
     </div>
-    <div class="bg-white p-6 rounded-lg shadow">
-        <div class="text-gray-600 text-sm">Pending</div>
-        <div class="text-3xl font-bold text-orange-600">{{ pending }}</div>
+    <div class="app-surface rounded-3xl p-6">
+        <div class="app-kicker">Still Open</div>
+        <div class="mt-3 text-3xl font-bold text-amber-100">{{ pending }}</div>
     </div>
-    <div class="bg-white p-6 rounded-lg shadow">
-        <div class="text-gray-600 text-sm">Total Users</div>
-        <div class="text-3xl font-bold text-purple-600">{{ total_users }}</div>
+    <div class="app-surface rounded-3xl p-6">
+        <div class="app-kicker">Awaiting Citizen Confirmation</div>
+        <div class="mt-3 text-3xl font-bold text-amber-100">{{ awaiting_confirmation }}</div>
+    </div>
+    <div class="app-surface rounded-3xl p-6">
+        <div class="app-kicker">Pending Access Requests</div>
+        <div class="mt-3 text-3xl font-bold text-cyan-100">{{ pending_requests|length }}</div>
     </div>
 </div>
 
-<div class="bg-white p-8 rounded-lg shadow">
-    <div class="flex justify-between items-center mb-6">
-        <h2 class="text-2xl font-bold">All Complaints</h2>
-        <div class="flex gap-2">
-            <input type="text" placeholder="Search..." class="px-4 py-2 border rounded-lg" />
-            <select class="px-4 py-2 border rounded-lg">
-                <option value="">All Status</option>
-                <option value="submitted">Submitted</option>
-                <option value="under_review">Under Review</option>
-                <option value="in_progress">In Progress</option>
-                <option value="resolved">Resolved</option>
-            </select>
+<div class="app-surface rounded-[2rem] p-8 mb-8">
+    <div class="flex flex-col gap-2 mb-6 md:flex-row md:items-end md:justify-between">
+        <div>
+            <h2 class="app-panel-title text-2xl">Authority / Admin Access Requests</h2>
+            <p class="text-sm app-muted mt-1">Approve only verified registrations. Approved users can then log in.</p>
         </div>
+        <div class="text-sm app-dim">Total users: {{ total_users }}</div>
     </div>
 
-    {% if complaints %}
+    {% if pending_requests %}
     <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b">
+        <table class="app-table text-sm">
+            <thead>
                 <tr>
-                    <th class="px-4 py-2 text-left">ID</th>
-                    <th class="px-4 py-2 text-left">Citizen</th>
-                    <th class="px-4 py-2 text-left">Category</th>
-                    <th class="px-4 py-2 text-left">Thana</th>
-                    <th class="px-4 py-2 text-left">Status</th>
-                    <th class="px-4 py-2 text-left">Created</th>
-                    <th class="px-4 py-2 text-left">Action</th>
+                    <th class="px-4 py-3 text-left font-medium">Requested Role</th>
+                    <th class="px-4 py-3 text-left font-medium">Name</th>
+                    <th class="px-4 py-3 text-left font-medium">Office Details</th>
+                    <th class="px-4 py-3 text-left font-medium">Reason</th>
+                    <th class="px-4 py-3 text-left font-medium">Requested At</th>
+                    <th class="px-4 py-3 text-left font-medium">Actions</th>
                 </tr>
             </thead>
             <tbody>
-                {% for complaint in complaints %}
-                <tr class="border-b hover:bg-gray-50">
-                    <td class="px-4 py-2">#{{ complaint.id }}</td>
-                    <td class="px-4 py-2">{{ complaint.citizen.first_name }}</td>
-                    <td class="px-4 py-2">{{ complaint.category|title }}</td>
-                    <td class="px-4 py-2">{{ complaint.thana }}</td>
-                    <td class="px-4 py-2">
-                        <span class="px-2 py-1 text-xs rounded-full font-medium {% if complaint.status == 'resolved' %}bg-green-100 text-green-800{% elif complaint.status == 'in_progress' %}bg-blue-100 text-blue-800{% else %}bg-orange-100 text-orange-800{% endif %}">
-                            {{ complaint.status|title }}
+                {% for profile in pending_requests %}
+                <tr class="align-top">
+                    <td class="px-4 py-3">
+                        <span class="app-status app-status-active rounded-full px-3 py-1 text-xs font-semibold">
+                            {{ profile.role|title }}
                         </span>
                     </td>
-                    <td class="px-4 py-2 text-xs">{{ complaint.created_at|date:"M d, Y" }}</td>
-                    <td class="px-4 py-2">
-                        <a href="{% url 'complaint_detail' complaint.id %}" class="text-blue-600 hover:underline">View</a>
+                    <td class="px-4 py-3">
+                        <div class="font-medium text-white">{{ profile.user.first_name|default:profile.user.username }}</div>
+                        <div class="text-xs app-dim">{{ profile.user.email }}</div>
+                        {% if profile.phone_number %}
+                        <div class="text-xs app-dim mt-1">{{ profile.phone_number }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if profile.thana %}
+                        <div><span class="font-medium text-white">Area:</span> {{ profile.thana }}</div>
+                        {% endif %}
+                        {% if profile.department %}
+                        <div><span class="font-medium text-white">Office:</span> {{ profile.department }}</div>
+                        {% endif %}
+                        {% if profile.employee_id %}
+                        <div class="text-xs app-dim mt-1">ID: {{ profile.employee_id }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 app-muted">{{ profile.access_reason|default:"No reason provided." }}</td>
+                    <td class="px-4 py-3 text-xs app-dim">{{ profile.created_at|date:"M d, Y H:i" }}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex flex-col gap-2 sm:flex-row">
+                            <form method="post" action="{% url 'approve_access_request' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="app-btn app-btn-success px-3 py-2 text-xs">
+                                    Approve
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'reject_access_request' profile.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="app-btn app-btn-danger px-3 py-2 text-xs">
+                                    Reject
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -73,7 +98,96 @@
         </table>
     </div>
     {% else %}
-    <p class="text-gray-600 text-center py-8">No complaints found.</p>
+    <p class="app-empty rounded-2xl px-6 py-8 text-center">No pending authority or admin requests.</p>
+    {% endif %}
+</div>
+
+<div class="app-surface rounded-[2rem] p-8">
+    <div class="flex flex-col gap-4 mb-6 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+            <h2 class="app-panel-title text-2xl">Complaint Monitoring</h2>
+            <p class="text-sm app-muted mt-1">Admins can see descriptions, timestamps, assigned authority, and send reminders for unresolved work.</p>
+        </div>
+        <form method="get" class="flex flex-col gap-2 sm:flex-row">
+            <input type="text" name="search" value="{{ search }}" placeholder="Search by citizen, thana, or description">
+            <select name="status">
+                <option value="">All Status</option>
+                <option value="submitted" {% if status == 'submitted' %}selected{% endif %}>Submitted</option>
+                <option value="acknowledged" {% if status == 'acknowledged' %}selected{% endif %}>Acknowledged</option>
+                <option value="awaiting_citizen_confirmation" {% if status == 'awaiting_citizen_confirmation' %}selected{% endif %}>Awaiting Citizen Confirmation</option>
+                <option value="resolved" {% if status == 'resolved' %}selected{% endif %}>Resolved</option>
+            </select>
+            <button type="submit" class="app-btn app-btn-secondary text-sm">Filter</button>
+        </form>
+    </div>
+
+    {% if complaints %}
+    <div class="overflow-x-auto">
+        <table class="app-table text-sm">
+            <thead>
+                <tr>
+                    <th class="px-4 py-3 text-left font-medium">Complaint</th>
+                    <th class="px-4 py-3 text-left font-medium">Citizen</th>
+                    <th class="px-4 py-3 text-left font-medium">Description</th>
+                    <th class="px-4 py-3 text-left font-medium">Assigned Authority</th>
+                    <th class="px-4 py-3 text-left font-medium">Timeline</th>
+                    <th class="px-4 py-3 text-left font-medium">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for complaint in complaints %}
+                <tr class="align-top">
+                    <td class="px-4 py-3">
+                        <div class="font-medium text-white">#{{ complaint.id }} - {{ complaint.category|title }}</div>
+                        <div class="text-xs app-dim mt-1">{{ complaint.area }}, {{ complaint.thana }}</div>
+                        <div class="mt-2">
+                            <span class="app-status px-2 py-1 text-xs rounded-full font-medium {% if complaint.status == 'resolved' %}app-status-resolved{% elif complaint.status == 'awaiting_citizen_confirmation' %}app-status-waiting{% elif complaint.status == 'acknowledged' %}app-status-active{% else %}app-status-default{% endif %}">
+                                {{ complaint.get_status_display }}
+                            </span>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="font-medium text-white">{{ complaint.citizen.first_name|default:complaint.citizen.username }}</div>
+                        <div class="text-xs app-dim">{{ complaint.citizen.email }}</div>
+                    </td>
+                    <td class="px-4 py-3 app-muted max-w-xs">
+                        {{ complaint.description }}
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if complaint.assigned_authority %}
+                        <div class="font-medium text-white">{{ complaint.assigned_authority.get_full_name|default:complaint.assigned_authority.username }}</div>
+                        <div class="text-xs app-dim">{{ complaint.assigned_authority.email }}</div>
+                        {% else %}
+                        <span class="app-dim">Not assigned yet</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-xs app-dim space-y-1">
+                        <div><span class="font-medium text-white/80">Filed:</span> {{ complaint.created_at|date:"M d, Y H:i" }}</div>
+                        <div><span class="font-medium text-white/80">Acknowledged:</span> {% if complaint.acknowledged_at %}{{ complaint.acknowledged_at|date:"M d, Y H:i" }}{% else %}Not yet{% endif %}</div>
+                        <div><span class="font-medium text-white/80">Solved By Authority:</span> {% if complaint.resolution_requested_at %}{{ complaint.resolution_requested_at|date:"M d, Y H:i" }}{% else %}Not yet{% endif %}</div>
+                        <div><span class="font-medium text-white/80">Citizen Confirmed:</span> {% if complaint.citizen_confirmed_at %}{{ complaint.citizen_confirmed_at|date:"M d, Y H:i" }}{% else %}Not yet{% endif %}</div>
+                        <div><span class="font-medium text-white/80">Reminder Sent:</span> {% if complaint.last_reminder_sent_at %}{{ complaint.last_reminder_sent_at|date:"M d, Y H:i" }}{% else %}Never{% endif %}</div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="flex flex-col items-start gap-2">
+                            <a href="{% url 'complaint_detail' complaint.id %}" class="app-link">View full timeline</a>
+                            {% if complaint.assigned_authority and complaint.status != 'resolved' %}
+                            <form method="post" action="{% url 'remind_assigned_authority' complaint.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="app-btn app-btn-warn px-3 py-2 text-xs">
+                                    Email Authority
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="app-empty rounded-2xl px-6 py-8 text-center">No complaints found.</p>
     {% endif %}
 </div>
 {% endblock %}

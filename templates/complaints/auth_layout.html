@@ -1,0 +1,475 @@
+{% extends 'complaints/base.html' %}
+
+{% block extra_head %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --auth-bg: #020202;
+        --auth-surface: rgba(255, 255, 255, 0.06);
+        --auth-surface-strong: rgba(255, 255, 255, 0.1);
+        --auth-border: rgba(255, 255, 255, 0.12);
+        --auth-text-soft: rgba(255, 255, 255, 0.7);
+        --auth-accent: #79f2dd;
+        --auth-accent-warm: #f4cf8d;
+        --auth-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+        --auth-page-bg:
+            radial-gradient(circle at top left, rgba(121, 242, 221, 0.14), transparent 34%),
+            radial-gradient(circle at 80% 15%, rgba(244, 207, 141, 0.14), transparent 28%),
+            linear-gradient(135deg, #000 0%, #050505 42%, #111 100%);
+        --auth-page-text: #ffffff;
+    }
+
+    html[data-theme='light'] {
+        --auth-bg: #f8f3ea;
+        --auth-surface: rgba(255, 255, 255, 0.7);
+        --auth-surface-strong: rgba(255, 255, 255, 0.92);
+        --auth-border: rgba(15, 23, 42, 0.1);
+        --auth-text-soft: rgba(17, 32, 49, 0.72);
+        --auth-shadow: 0 24px 60px rgba(17, 32, 49, 0.12);
+        --auth-page-bg:
+            radial-gradient(circle at top left, rgba(121, 242, 221, 0.18), transparent 26%),
+            radial-gradient(circle at 80% 15%, rgba(244, 207, 141, 0.2), transparent 24%),
+            linear-gradient(135deg, #fffef9 0%, #f8f3ea 42%, #eef4f6 100%);
+        --auth-page-text: #112031;
+    }
+
+    body {
+        font-family: 'Manrope', sans-serif;
+        background: var(--auth-page-bg);
+        color: var(--auth-page-text);
+    }
+
+    .auth-title-font {
+        font-family: 'Space Grotesk', sans-serif;
+    }
+
+    .intro-brand {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        pointer-events: none;
+        animation: intro-lift 1.9s cubic-bezier(0.2, 0.82, 0.24, 1) 0.2s forwards;
+    }
+
+    .intro-brand__inner {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        width: min(100%, 60rem);
+        padding-inline: 1.5rem;
+        text-align: left;
+    }
+
+    .intro-brand::before {
+        content: '';
+        position: absolute;
+        width: min(54vw, 540px);
+        height: min(54vw, 540px);
+        border-radius: 9999px;
+        background: radial-gradient(circle, rgba(121, 242, 221, 0.22), rgba(121, 242, 221, 0.02) 58%, transparent 72%);
+        filter: blur(8px);
+        opacity: 0.9;
+    }
+
+    .intro-brand__kicker {
+        margin-bottom: 1rem;
+        letter-spacing: 0.45em;
+        text-transform: uppercase;
+        font-size: 0.72rem;
+        color: rgba(255, 255, 255, 0.6);
+        opacity: 0;
+        animation: fade-up 0.7s ease 0.4s forwards;
+    }
+
+    .intro-brand__title {
+        position: relative;
+        margin: 0;
+        padding-left: 0.16em;
+        font-size: clamp(2.8rem, 7vw, 5.8rem);
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        opacity: 0;
+        transform: scale(0.72);
+        animation: brand-pop 0.9s cubic-bezier(0.2, 0.82, 0.24, 1) 0.15s forwards;
+        text-shadow: 0 0 30px rgba(121, 242, 221, 0.16);
+    }
+
+    .intro-brand__subtitle {
+        position: relative;
+        margin-top: 1rem;
+        max-width: 32rem;
+        text-align: left;
+        color: rgba(255, 255, 255, 0.72);
+        opacity: 0;
+        animation: fade-up 0.65s ease 0.8s forwards;
+    }
+
+    .auth-content {
+        opacity: 0;
+        transform: translateY(32px) scale(0.98);
+        animation: panel-reveal 0.9s ease 1.55s forwards;
+    }
+
+    .auth-shell {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--auth-border);
+        border-radius: 2rem;
+        background: linear-gradient(180deg, var(--auth-surface-strong), var(--auth-surface));
+        backdrop-filter: blur(24px);
+        box-shadow: var(--auth-shadow);
+    }
+
+    .auth-shell::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+            radial-gradient(circle at top right, rgba(121, 242, 221, 0.12), transparent 30%),
+            linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent 58%);
+        pointer-events: none;
+    }
+
+    .auth-info-card,
+    .auth-metric-card {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+    }
+
+    .auth-tab {
+        border: 1px solid transparent;
+        color: rgba(255, 255, 255, 0.72);
+        transition: all 180ms ease;
+    }
+
+    .auth-tab:hover {
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .auth-tab.is-active {
+        background: linear-gradient(135deg, rgba(121, 242, 221, 0.24), rgba(244, 207, 141, 0.18));
+        border-color: rgba(121, 242, 221, 0.26);
+        color: #fff;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    }
+
+    .auth-input {
+        width: 100%;
+        border-radius: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.05);
+        color: #fff;
+        padding: 0.95rem 1rem;
+        transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+    }
+
+    .auth-input::placeholder {
+        color: rgba(255, 255, 255, 0.34);
+    }
+
+    .auth-input:focus {
+        outline: none;
+        border-color: rgba(121, 242, 221, 0.48);
+        background: rgba(255, 255, 255, 0.08);
+        box-shadow: 0 0 0 4px rgba(121, 242, 221, 0.08);
+        transform: translateY(-1px);
+    }
+
+    .auth-submit {
+        background: linear-gradient(135deg, var(--auth-accent), var(--auth-accent-warm));
+        color: #050505;
+        box-shadow: 0 18px 40px rgba(121, 242, 221, 0.18);
+    }
+
+    .auth-submit:hover {
+        filter: brightness(1.02);
+        transform: translateY(-1px);
+    }
+
+    @keyframes brand-pop {
+        0% {
+            opacity: 0;
+            transform: scale(0.72);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    @keyframes fade-up {
+        0% {
+            opacity: 0;
+            transform: translateY(18px);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes intro-lift {
+        0%, 48% {
+            transform: translateY(0) scale(1);
+        }
+        100% {
+            transform: translateY(calc(-44vh + 4.5rem)) scale(0.42);
+        }
+    }
+
+    @keyframes panel-reveal {
+        0% {
+            opacity: 0;
+            transform: translateY(32px) scale(0.98);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+    @media (max-width: 1024px) {
+        @keyframes intro-lift {
+            0%, 48% {
+                transform: translateY(0) scale(1);
+            }
+            100% {
+                transform: translateY(calc(-41vh + 4rem)) scale(0.45);
+            }
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .intro-brand {
+            align-items: flex-start;
+            justify-content: center;
+        }
+
+        .intro-brand__inner {
+            width: min(100%, 58rem);
+            padding-left: 0;
+            padding-right: 1.5rem;
+        }
+
+        .auth-shell {
+            max-width: 33rem;
+            margin-left: auto;
+            transform: translateX(2.75rem);
+        }
+    }
+
+    @media (max-width: 640px) {
+        .intro-brand__inner {
+            width: 100%;
+            align-items: center;
+            text-align: center;
+        }
+
+        .intro-brand__title {
+            letter-spacing: 0.14em;
+            padding-left: 0.14em;
+            white-space: normal;
+        }
+
+        .intro-brand__subtitle {
+            text-align: center;
+        }
+
+        @keyframes intro-lift {
+            0%, 48% {
+                transform: translateY(0) scale(1);
+            }
+            100% {
+                transform: translateY(calc(-39vh + 3.5rem)) scale(0.5);
+            }
+        }
+    }
+
+    html[data-theme='light'] .intro-brand__kicker,
+    html[data-theme='light'] .intro-brand__subtitle,
+    html[data-theme='light'] .text-white\/70,
+    html[data-theme='light'] .text-white\/65,
+    html[data-theme='light'] .text-white\/60,
+    html[data-theme='light'] .text-white\/55,
+    html[data-theme='light'] .text-white\/45 {
+        color: rgba(17, 32, 49, 0.72) !important;
+    }
+
+    html[data-theme='light'] .text-white,
+    html[data-theme='light'] .text-emerald-200,
+    html[data-theme='light'] .text-amber-100,
+    html[data-theme='light'] .text-cyan-100 {
+        color: #112031 !important;
+    }
+
+    html[data-theme='light'] .bg-black\/40 {
+        background: rgba(255, 255, 255, 0.7) !important;
+    }
+
+    html[data-theme='light'] .bg-white\/5,
+    html[data-theme='light'] .bg-white\/\[0\.04\] {
+        background: rgba(255, 255, 255, 0.7) !important;
+    }
+
+    html[data-theme='light'] .border-white\/10,
+    html[data-theme='light'] .border-white\/8 {
+        border-color: rgba(15, 23, 42, 0.1) !important;
+    }
+
+    html[data-theme='light'] .auth-info-card,
+    html[data-theme='light'] .auth-metric-card {
+        border-color: rgba(15, 23, 42, 0.1);
+        background: rgba(255, 255, 255, 0.62);
+    }
+
+    html[data-theme='light'] .auth-tab {
+        color: rgba(17, 32, 49, 0.74);
+    }
+
+    html[data-theme='light'] .auth-tab:hover,
+    html[data-theme='light'] .auth-tab.is-active {
+        color: #112031;
+    }
+
+    html[data-theme='light'] .auth-input {
+        color: #112031;
+        background: rgba(255, 255, 255, 0.86);
+        border-color: rgba(15, 23, 42, 0.12);
+    }
+
+    html[data-theme='light'] .auth-input::placeholder {
+        color: rgba(17, 32, 49, 0.44);
+    }
+
+    html[data-theme='light'] .auth-input:focus {
+        background: rgba(255, 255, 255, 1);
+    }
+
+    html[data-theme='light'] .text-red-100,
+    html[data-theme='light'] .text-red-200 {
+        color: #b91c1c !important;
+    }
+
+    html[data-theme='light'] .text-emerald-100 {
+        color: #166534 !important;
+    }
+
+    html[data-theme='light'] .text-amber-50 {
+        color: #92400e !important;
+    }
+
+    html[data-theme='light'] .text-cyan-50 {
+        color: #155e75 !important;
+    }
+</style>
+{% endblock %}
+
+{% block body_class %}min-h-screen overflow-x-hidden bg-black text-white{% endblock %}
+{% block navigation %}{% endblock %}
+{% block messages %}{% endblock %}
+{% block footer %}{% endblock %}
+
+{% block main_class %}relative min-h-screen overflow-hidden px-5 py-6 sm:px-8 sm:py-8 lg:px-12{% endblock %}
+
+{% block content %}
+<div class="pointer-events-none absolute inset-0 overflow-hidden">
+    <div class="absolute left-[-12rem] top-[-8rem] h-[28rem] w-[28rem] rounded-full bg-emerald-300/10 blur-3xl"></div>
+    <div class="absolute bottom-[-10rem] right-[-6rem] h-[24rem] w-[24rem] rounded-full bg-amber-200/10 blur-3xl"></div>
+</div>
+
+<div class="relative z-20 mx-auto flex max-w-6xl justify-end">
+    <button type="button" class="app-theme-toggle" data-theme-toggle>
+        <span data-theme-label>Bright Mode</span>
+    </button>
+</div>
+
+<div class="intro-brand px-6 text-center">
+    <div class="intro-brand__inner">
+        <div class="intro-brand__kicker">Citizen Support Experience</div>
+        <h1 class="intro-brand__title auth-title-font">Dhaka Nagorik AI</h1>
+        <p class="intro-brand__subtitle text-sm sm:text-base">
+            Smart civic access for Dhaka residents, with a cleaner sign in flow and a modern complaint experience.
+        </p>
+    </div>
+</div>
+
+<div class="relative mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl items-center justify-center lg:min-h-[calc(100vh-4rem)]">
+    <div class="auth-content grid w-full gap-8 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
+        <section class="pt-28 lg:pt-24">
+            <div class="mb-6 inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[0.68rem] uppercase tracking-[0.36em] text-white/70">
+                Built for Dhaka residents
+            </div>
+            <div class="max-w-xl space-y-5">
+                <h2 class="auth-title-font text-4xl font-bold leading-tight text-white sm:text-5xl">
+                    Complaint support that feels calm, fast, and clear.
+                </h2>
+                <p class="text-base leading-7 text-white/70 sm:text-lg">
+                    Start with a secure account, speak to the assistant, and track important civic issues without getting lost in a clunky interface.
+                </p>
+            </div>
+
+            <div class="mt-10 grid gap-4 sm:grid-cols-3">
+                <div class="auth-metric-card rounded-3xl p-5">
+                    <div class="mb-3 text-sm text-emerald-200">24/7</div>
+                    <div class="text-lg font-semibold text-white">Guided Access</div>
+                    <p class="mt-2 text-sm leading-6 text-white/60">Login and report issues through one clear starting point.</p>
+                </div>
+                <div class="auth-metric-card rounded-3xl p-5">
+                    <div class="mb-3 text-sm text-amber-100">AI</div>
+                    <div class="text-lg font-semibold text-white">Smart Intake</div>
+                    <p class="mt-2 text-sm leading-6 text-white/60">The experience is designed around assisted complaint handling.</p>
+                </div>
+                <div class="auth-metric-card rounded-3xl p-5">
+                    <div class="mb-3 text-sm text-cyan-100">Safe</div>
+                    <div class="text-lg font-semibold text-white">Secure Entry</div>
+                    <p class="mt-2 text-sm leading-6 text-white/60">Simple sign up and login with a more polished first impression.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="auth-shell rounded-[2rem] p-4 sm:p-6">
+            <div class="relative z-10 rounded-[1.6rem] border border-white/10 bg-black/40 p-6 sm:p-8">
+                <div class="mb-6 flex rounded-2xl bg-white/[0.04] p-1.5">
+                    <a href="{% url 'login' %}" class="auth-tab {% if auth_mode == 'login' %}is-active{% endif %} flex-1 rounded-2xl px-4 py-3 text-center text-sm font-semibold">
+                        Login
+                    </a>
+                    <a href="{% url 'signup' %}" class="auth-tab {% if auth_mode == 'signup' %}is-active{% endif %} flex-1 rounded-2xl px-4 py-3 text-center text-sm font-semibold">
+                        Sign Up
+                    </a>
+                </div>
+
+                <div class="mb-8">
+                    <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs uppercase tracking-[0.3em] text-white/60">
+                        {% block auth_badge %}Secure Access{% endblock %}
+                    </div>
+                    <h3 class="text-3xl font-bold text-white">{% block auth_heading %}{% endblock %}</h3>
+                    <p class="mt-3 text-sm leading-6 text-white/70">{% block auth_description %}{% endblock %}</p>
+                </div>
+
+                {% if messages %}
+                <div class="mb-6 space-y-3">
+                    {% for message in messages %}
+                    <div class="rounded-2xl border px-4 py-3 text-sm {% if 'error' in message.tags %}border-red-400/25 bg-red-400/10 text-red-100{% elif 'success' in message.tags %}border-emerald-400/25 bg-emerald-400/10 text-emerald-100{% elif 'warning' in message.tags %}border-amber-300/25 bg-amber-300/10 text-amber-50{% else %}border-cyan-300/25 bg-cyan-300/10 text-cyan-50{% endif %}">
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% block auth_form %}{% endblock %}
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}

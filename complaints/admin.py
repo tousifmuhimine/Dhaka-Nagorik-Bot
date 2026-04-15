@@ -1,20 +1,38 @@
 from django.contrib import admin
-from .models import UserProfile, Complaint, ComplaintUpdate, ChatSession, ChatMessage, ChatAttachment, ExtractedComplaint
+from .models import (
+    ChatAttachment,
+    ChatMessage,
+    ChatSession,
+    Complaint,
+    ComplaintActivity,
+    ComplaintUpdate,
+    ExtractedComplaint,
+    UserProfile,
+)
 
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'role', 'thana', 'created_at')
-    list_filter = ('role', 'created_at')
-    search_fields = ('user__email', 'thana')
+    list_display = ('user', 'role', 'approval_status', 'thana', 'department', 'created_at')
+    list_filter = ('role', 'approval_status', 'created_at')
+    search_fields = ('user__email', 'thana', 'department', 'employee_id')
 
 
 @admin.register(Complaint)
 class ComplaintAdmin(admin.ModelAdmin):
-    list_display = ('id', 'citizen', 'category', 'thana', 'status', 'created_at')
+    list_display = ('id', 'citizen', 'category', 'thana', 'status', 'assigned_authority', 'created_at')
     list_filter = ('status', 'category', 'created_at')
     search_fields = ('description', 'area', 'citizen__email')
-    readonly_fields = ('created_at', 'updated_at', 'email_sent_at')
+    readonly_fields = (
+        'created_at',
+        'updated_at',
+        'acknowledged_at',
+        'resolution_requested_at',
+        'citizen_confirmed_at',
+        'resolved_at',
+        'last_reminder_sent_at',
+        'email_sent_at',
+    )
 
 
 @admin.register(ComplaintUpdate)
@@ -22,6 +40,14 @@ class ComplaintUpdateAdmin(admin.ModelAdmin):
     list_display = ('complaint', 'updated_by', 'status_change', 'created_at')
     list_filter = ('status_change', 'created_at')
     search_fields = ('message', 'complaint__id')
+
+
+@admin.register(ComplaintActivity)
+class ComplaintActivityAdmin(admin.ModelAdmin):
+    list_display = ('complaint', 'event_type', 'actor', 'created_at')
+    list_filter = ('event_type', 'created_at')
+    search_fields = ('complaint__id', 'message', 'actor__email')
+    readonly_fields = ('created_at',)
 
 
 @admin.register(ChatSession)

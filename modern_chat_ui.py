@@ -11,7 +11,7 @@ class ModernChatUI:
 
     def __init__(self, page: ft.Page) -> None:
         self.page = page
-        self.page.title = "Dhaka Civic Complaint System - Chat"
+        self.page.title = "Dhaka Nagorik AI - Chat"
         self.page.window.width = 1400
         self.page.window.height = 900
         self.page.padding = 0
@@ -55,7 +55,7 @@ class ModernChatUI:
         
         # Add welcome message after page is ready
         self._add_bot_message(
-            "Hello! I'm here to help you report civic complaints in Dhaka. What issue would you like to report?"
+            "Hello! I am Dhaka Nagorik AI. I can help you report civic complaints in Dhaka. What issue would you like to report?"
         )
 
     def _create_divider(self) -> ft.GestureDetector:
