@@ -22,10 +22,9 @@ class ImageAnalysisService:
             "meta-llama/llama-4-scout-17b-16e-instruct",
         )
 
-    def _encode_image_to_base64(self, image_path: str) -> str:
-        """Convert image file to base64 string."""
-        with open(image_path, "rb") as image_file:
-            return base64.standard_b64encode(image_file.read()).decode("utf-8")
+    def _encode_image_bytes_to_base64(self, image_bytes: bytes) -> str:
+        """Convert image bytes to base64 string."""
+        return base64.standard_b64encode(image_bytes).decode("utf-8")
 
     def analyze_complaint_image(self, image_path: str) -> dict:
         """
@@ -37,22 +36,25 @@ class ImageAnalysisService:
         Returns:
             Dict with analysis results including issue type, severity, location clues, etc.
         """
+        with open(image_path, "rb") as image_file:
+            image_bytes = image_file.read()
+        return self.analyze_complaint_image_bytes(
+            image_bytes,
+            filename=image_path,
+        )
+
+    def analyze_complaint_image_bytes(
+        self,
+        image_bytes: bytes,
+        *,
+        filename: str = "",
+        mime_type: Optional[str] = None,
+    ) -> dict:
+        """Analyze a complaint image from raw bytes."""
         try:
-            # Encode image to base64
-            image_data = self._encode_image_to_base64(image_path)
-            
-            # Determine MIME type from file extension
-            file_ext = os.path.splitext(image_path)[1].lower()
-            mime_types = {
-                ".jpg": "image/jpeg",
-                ".jpeg": "image/jpeg",
-                ".png": "image/png",
-                ".gif": "image/gif",
-                ".webp": "image/webp",
-            }
-            mime_type = mime_types.get(file_ext, "image/jpeg")
-            
-            # Use Groq Vision API
+            image_data = self._encode_image_bytes_to_base64(image_bytes)
+            mime_type = mime_type or self._mime_type_for_name(filename)
+
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -75,10 +77,10 @@ class ImageAnalysisService:
                 temperature=0.3,
                 max_tokens=500,
             )
-            
+
             analysis_text = response.choices[0].message.content
             return self._parse_analysis(analysis_text)
-            
+
         except Exception as e:
             return {
                 "success": False,
@@ -87,6 +89,18 @@ class ImageAnalysisService:
                 "severity": "unknown",
                 "description": "Error analyzing image",
             }
+
+    def _mime_type_for_name(self, filename: str) -> str:
+        """Infer MIME type from the file extension."""
+        file_ext = os.path.splitext(filename or "")[1].lower()
+        mime_types = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+        }
+        return mime_types.get(file_ext, "image/jpeg")
 
     def _get_analysis_prompt(self) -> str:
         """Get the analysis prompt for image inspection."""

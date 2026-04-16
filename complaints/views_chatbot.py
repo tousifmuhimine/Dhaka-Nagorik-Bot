@@ -75,9 +75,7 @@ def get_user_chat_session_or_error(request, session_id):
 def get_rag_service():
     """Reuse a single RAG service per process."""
     if not hasattr(get_rag_service, "_instance"):
-        service = RAGService()
-        service.load_policies_from_pdfs()
-        get_rag_service._instance = service
+        get_rag_service._instance = RAGService()
     return get_rag_service._instance
 
 
@@ -157,7 +155,15 @@ def build_model_history(chat_session: ChatSession, include_image_analysis: bool 
             for attachment in attachments:
                 try:
                     if attachment.file:
-                        analysis = image_analyzer.analyze_complaint_image(attachment.file.path)
+                        attachment.file.open("rb")
+                        try:
+                            analysis = image_analyzer.analyze_complaint_image_bytes(
+                                attachment.file.read(),
+                                filename=attachment.original_name,
+                                mime_type=attachment.content_type or None,
+                            )
+                        finally:
+                            attachment.file.close()
                         if analysis.get('success'):
                             image_analyses.append(analysis)
                 except Exception as e:

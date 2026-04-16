@@ -134,3 +134,33 @@ X-User-Thana: Dhanmondi
 ## Supabase schema
 
 See `supabase/schema.sql` for tables, status handling, and timestamp columns.
+
+## Supabase vector storage
+
+The chatbot can use Supabase pgvector instead of local Chroma for policy retrieval and complaint similarity.
+
+1. Run `supabase/schema.sql` in the Supabase SQL editor.
+2. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env`.
+3. Change `VECTOR_STORE_BACKEND=supabase`.
+4. Pre-index your policies with `python manage.py index_policies`.
+
+For deployment, keep `ENABLE_AUTO_POLICY_INDEXING=false` so the app reads from prebuilt vectors instead of writing them during request handling.
+
+If `VECTOR_STORE_BACKEND=auto`, the app will use Supabase automatically when those credentials are present and fall back to local Chroma otherwise.
+
+## Supabase Postgres for Django
+
+The main Django database can also run on Supabase Postgres.
+
+1. Replace the placeholder DB password in `.env`.
+2. Run migrations with `python manage.py migrate`.
+3. Create users or seed data as needed.
+
+## Supabase Storage
+
+Attachments and generated complaint documents can be stored in Supabase Storage instead of local folders.
+
+1. Set `ENABLE_SUPABASE_STORAGE=true` in `.env`.
+2. Choose bucket names with `SUPABASE_MEDIA_BUCKET` and `SUPABASE_DOCUMENT_BUCKET`.
+3. Start using the app normally for new uploads/documents.
+4. If you already have local files, run `python manage.py sync_supabase_storage`.

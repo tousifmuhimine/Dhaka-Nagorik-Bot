@@ -1,9 +1,12 @@
 """Email delivery for complaint confirmations and generated documents."""
 
 from email.utils import formataddr
+from pathlib import Path
 
 from django.conf import settings
 from django.core.mail import EmailMessage
+
+from .document_storage_service import DocumentStorageService
 
 
 class ComplaintEmailService:
@@ -27,9 +30,15 @@ class ComplaintEmailService:
             from_email=formataddr((settings.EMAIL_FROM_NAME, settings.DEFAULT_FROM_EMAIL)),
             to=recipients,
         )
-        for path in attachment_paths or []:
-            if path:
-                email.attach_file(path)
+        document_storage = DocumentStorageService()
+        for stored_name in attachment_paths or []:
+            if not stored_name:
+                continue
+            email.attach(
+                Path(stored_name).name,
+                document_storage.read_bytes(stored_name),
+                document_storage.guess_mime_type(stored_name),
+            )
         return email
 
     def send_complaint_to_authority(self, complaint, attachment_paths=None) -> tuple[bool, str]:
@@ -51,7 +60,7 @@ class ComplaintEmailService:
             f"A new complaint has been routed to your area in Dhaka Nagorik AI.\n\n"
             f"Complaint ID: #{complaint.id}\n"
             f"Category: {complaint.get_category_display()}\n"
-            f"Thana: {complaint.thana}\n"
+            f"Service Area: {complaint.service_area}\n"
             f"Area: {complaint.area}\n"
             f"Current status: {complaint.get_status_display()}\n\n"
             f"Citizen: {complaint.citizen.get_full_name() or complaint.citizen.username}\n"
@@ -90,7 +99,7 @@ class ComplaintEmailService:
             authority_status = (
                 f"Your complaint has been delivered to "
                 f"{complaint.assigned_authority.get_full_name() or complaint.assigned_authority.username}, "
-                f"the authority assigned for {complaint.thana}."
+                f"the authority assigned for {complaint.service_area}."
             )
         elif complaint.assigned_authority:
             authority_status = (
@@ -110,7 +119,7 @@ class ComplaintEmailService:
             f"Your complaint #{complaint.id} has been created successfully.\n\n"
             f"{authority_status}\n\n"
             f"Category: {complaint.get_category_display()}\n"
-            f"Thana: {complaint.thana}\n"
+            f"Service Area: {complaint.service_area}\n"
             f"Area: {complaint.area}\n"
             f"Status: {complaint.get_status_display()}\n\n"
             "A copy of the generated complaint documents is attached for your records.\n"
@@ -158,7 +167,7 @@ class ComplaintEmailService:
             f"Hello {complaint.assigned_authority.get_full_name() or complaint.assigned_authority.username},\n\n"
             f"Complaint #{complaint.id} is still pending action.\n\n"
             f"Category: {complaint.get_category_display()}\n"
-            f"Thana: {complaint.thana}\n"
+            f"Service Area: {complaint.service_area}\n"
             f"Area: {complaint.area}\n"
             f"Current status: {complaint.get_status_display()}\n\n"
             f"Description:\n{complaint.description}\n\n"

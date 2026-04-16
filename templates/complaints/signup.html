@@ -36,9 +36,35 @@
     </div>
 
     <div data-role-field="authority">
-        <label class="mb-2 block text-sm font-medium text-white/80">Authorized Area / Thana</label>
+        <label class="mb-2 block text-sm font-medium text-white/80">City Corporation</label>
+        {{ form.city_corporation }}
+        <p class="mt-2 text-xs leading-5 text-white/45">Use the official city corporation that owns the ward you serve.</p>
+        {% if form.city_corporation.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.city_corporation.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    <div data-role-field="authority">
+        <label class="mb-2 block text-sm font-medium text-white/80">Ward Number</label>
+        {{ form.ward_number }}
+        <p class="mt-2 text-xs leading-5 text-white/45">Only one approved authority can own a specific ward at a time.</p>
+        {% if form.ward_number.errors %}
+        <ul class="mt-2 space-y-1 text-sm text-red-200">
+            {% for error in form.ward_number.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+
+    <div data-role-field="authority">
+        <label class="mb-2 block text-sm font-medium text-white/80">Neighborhood Label</label>
         {{ form.thana }}
-        <p class="mt-2 text-xs leading-5 text-white/45">Authority accounts only see complaints from this approved area.</p>
+        <p class="mt-2 text-xs leading-5 text-white/45">This keeps the service area recognizable for admins and citizens, for example Dhanmondi or Gulshan.</p>
         {% if form.thana.errors %}
         <ul class="mt-2 space-y-1 text-sm text-red-200">
             {% for error in form.thana.errors %}

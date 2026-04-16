@@ -33,7 +33,17 @@
             </div>
 
             <div>
-                <label class="block text-sm font-medium mb-2 text-white/80">Thana</label>
+                <label class="block text-sm font-medium mb-2 text-white/80">City Corporation</label>
+                {{ form.city_corporation }}
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-2 text-white/80">Ward Number</label>
+                {{ form.ward_number }}
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-2 text-white/80">Neighborhood / Thana Label</label>
                 {{ form.thana }}
             </div>
 
@@ -80,7 +90,8 @@
                         <div class="font-medium text-white">
                             Complaint #{{ complaint.id }} - {{ complaint.category|title }}
                         </div>
-                        <div class="mt-1 text-sm app-muted">{{ complaint.area }}, {{ complaint.thana }}</div>
+                        <div class="mt-1 text-sm app-muted">{{ complaint.area }}</div>
+                        <div class="mt-1 text-xs app-dim">{{ complaint.service_area }}</div>
                         <div class="mt-1 text-xs app-dim">Filed {{ complaint.created_at|date:"M d, Y H:i" }}</div>
                         {% if complaint.assigned_authority %}
                         <div class="mt-1 text-xs app-dim">Assigned authority: {{ complaint.assigned_authority.get_full_name|default:complaint.assigned_authority.email }}</div>

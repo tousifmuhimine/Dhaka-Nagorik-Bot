@@ -4,6 +4,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 
+from .area_routing import CITY_CORPORATION_CHOICES, WARD_NUMBER_CHOICES
 from .models import Complaint, ComplaintUpdate, UserProfile
 
 
@@ -40,12 +41,24 @@ class SignUpForm(UserCreationForm):
             'autocomplete': 'name',
         })
     )
+    city_corporation = forms.ChoiceField(
+        required=False,
+        choices=[('', 'Select city corporation')] + CITY_CORPORATION_CHOICES,
+        widget=forms.Select(attrs={'class': AUTH_SELECT_CLASS}),
+    )
+    ward_number = forms.TypedChoiceField(
+        required=False,
+        coerce=int,
+        empty_value=None,
+        choices=[('', 'Select ward')] + WARD_NUMBER_CHOICES,
+        widget=forms.Select(attrs={'class': AUTH_SELECT_CLASS}),
+    )
     thana = forms.CharField(
         max_length=100,
         required=False,
         widget=forms.TextInput(attrs={
             'class': AUTH_INPUT_CLASS,
-            'placeholder': 'Authorized thana or area',
+            'placeholder': 'Neighborhood label (e.g. Dhanmondi, Gulshan)',
         }),
     )
     department = forms.CharField(
@@ -108,6 +121,8 @@ class SignUpForm(UserCreationForm):
         fields = (
             'role',
             'first_name',
+            'city_corporation',
+            'ward_number',
             'thana',
             'department',
             'employee_id',
@@ -127,6 +142,8 @@ class SignUpForm(UserCreationForm):
     def clean(self):
         cleaned_data = super().clean()
         role = cleaned_data.get('role')
+        city_corporation = (cleaned_data.get('city_corporation') or '').strip()
+        ward_number = cleaned_data.get('ward_number')
         thana = (cleaned_data.get('thana') or '').strip()
         department = (cleaned_data.get('department') or '').strip()
         employee_id = (cleaned_data.get('employee_id') or '').strip()
@@ -143,11 +160,32 @@ class SignUpForm(UserCreationForm):
             if not access_reason:
                 self.add_error('access_reason', 'Please explain why you need elevated access.')
 
-        if role == 'authority' and not thana:
-            self.add_error('thana', 'Authority access requires an authorized thana or area.')
+        if role == 'authority':
+            if not city_corporation:
+                self.add_error('city_corporation', 'Authority access requires a city corporation.')
+            if not ward_number:
+                self.add_error('ward_number', 'Authority access requires a ward number.')
+            if not thana:
+                self.add_error('thana', 'Add a neighborhood label so the service area is easy to recognize.')
+
+            if city_corporation and ward_number:
+                duplicate = UserProfile.objects.filter(
+                    role='authority',
+                    city_corporation=city_corporation,
+                    ward_number=ward_number,
+                    approval_status__in={'pending', 'approved'},
+                ).exists()
+                if duplicate:
+                    self.add_error(
+                        'ward_number',
+                        'An authority account already exists or is pending for this ward.',
+                    )
 
         if role == 'admin' and thana:
             cleaned_data['thana'] = ''
+        if role == 'admin':
+            cleaned_data['city_corporation'] = ''
+            cleaned_data['ward_number'] = None
 
         return cleaned_data
 
@@ -188,12 +226,14 @@ class ComplaintForm(forms.ModelForm):
     
     class Meta:
         model = Complaint
-        fields = ['category', 'thana', 'area', 'description']
+        fields = ['category', 'city_corporation', 'ward_number', 'thana', 'area', 'description']
         widgets = {
             'category': forms.Select(attrs={'class': 'w-full px-4 py-2 border rounded-lg'}),
+            'city_corporation': forms.Select(attrs={'class': 'w-full px-4 py-2 border rounded-lg'}),
+            'ward_number': forms.Select(attrs={'class': 'w-full px-4 py-2 border rounded-lg'}),
             'thana': forms.TextInput(attrs={
                 'class': 'w-full px-4 py-2 border rounded-lg',
-                'placeholder': 'Enter your thana/area'
+                'placeholder': 'Neighborhood / thana label (e.g. Dhanmondi, Gulshan)'
             }),
             'area': forms.TextInput(attrs={
                 'class': 'w-full px-4 py-2 border rounded-lg',
@@ -205,6 +245,26 @@ class ComplaintForm(forms.ModelForm):
                 'placeholder': 'Describe your complaint in detail...'
             }),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['city_corporation'].choices = [('', 'Select city corporation')] + CITY_CORPORATION_CHOICES
+        self.fields['ward_number'].choices = [('', 'Select ward')] + WARD_NUMBER_CHOICES
+
+    def clean(self):
+        cleaned_data = super().clean()
+        city_corporation = (cleaned_data.get('city_corporation') or '').strip()
+        ward_number = cleaned_data.get('ward_number')
+        thana = (cleaned_data.get('thana') or '').strip()
+
+        if not city_corporation:
+            self.add_error('city_corporation', 'Please choose DNCC or DSCC.')
+        if not ward_number:
+            self.add_error('ward_number', 'Please choose the official ward number for routing.')
+        if not thana:
+            self.add_error('thana', 'Please add the neighborhood/thana label for easier review.')
+
+        return cleaned_data
 
 
 class ComplaintUpdateForm(forms.ModelForm):

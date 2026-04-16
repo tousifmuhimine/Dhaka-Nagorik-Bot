@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from io import BytesIO
 from typing import Any, cast
 
-from django.conf import settings
 from django.utils import timezone
 from docx import Document
 from docx.enum.section import WD_SECTION_START
@@ -19,40 +18,43 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from .document_storage_service import DocumentStorageService
+
 
 class ComplaintDocumentService:
     """Generate formal DOCX and PDF complaint applications."""
 
     def __init__(self):
-        self.output_dir = Path(settings.DOCUMENT_OUTPUT_DIR)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.storage = DocumentStorageService()
 
     def generate(self, complaint, extracted_complaint=None, attachments=None) -> dict:
-        """Generate both document formats and return their filesystem paths."""
+        """Generate both document formats and return their stored keys."""
         attachments = attachments or []
         timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
         base_name = f"complaint_{complaint.id}_{timestamp}"
-
-        docx_path = self.output_dir / f"{base_name}.docx"
-        pdf_path = self.output_dir / f"{base_name}.pdf"
+        docx_name = f"complaint_documents/{complaint.id}/{base_name}.docx"
+        pdf_name = f"complaint_documents/{complaint.id}/{base_name}.pdf"
 
         try:
-            self._generate_docx(docx_path, complaint, extracted_complaint, attachments)
+            docx_bytes = self._generate_docx(complaint, extracted_complaint, attachments)
         except Exception as e:
             raise RuntimeError(f"Failed to generate DOCX: {str(e)}")
         
         try:
-            self._generate_pdf(pdf_path, complaint, extracted_complaint, attachments)
+            pdf_bytes = self._generate_pdf(complaint, extracted_complaint, attachments)
         except Exception as e:
             raise RuntimeError(f"Failed to generate PDF: {str(e)}")
 
+        stored_docx = self.storage.save_bytes(docx_name, docx_bytes)
+        stored_pdf = self.storage.save_bytes(pdf_name, pdf_bytes)
+
         return {
-            'docx_path': str(docx_path),
-            'pdf_path': str(pdf_path),
+            'docx_path': stored_docx,
+            'pdf_path': stored_pdf,
         }
 
-    def _generate_docx(self, path: Path, complaint: Any, extracted_complaint: Any, attachments: list[Any]) -> None:
-        """Create a formal Word application for the complaint."""
+    def _generate_docx(self, complaint: Any, extracted_complaint: Any, attachments: list[Any]) -> bytes:
+        """Create a formal Word application for the complaint and return its bytes."""
         document: Any = Document()
         self._configure_docx_page(document)
 
@@ -118,12 +120,15 @@ class ComplaintDocumentService:
             for note in validation_notes:
                 self._add_docx_paragraph(document, f"- {note}")
 
-        document.save(str(path))
+        buffer = BytesIO()
+        document.save(buffer)
+        return buffer.getvalue()
 
-    def _generate_pdf(self, path: Path, complaint: Any, extracted_complaint: Any, attachments: list[Any]) -> None:
-        """Create a formal PDF application for the complaint."""
+    def _generate_pdf(self, complaint: Any, extracted_complaint: Any, attachments: list[Any]) -> bytes:
+        """Create a formal PDF application for the complaint and return its bytes."""
+        buffer = BytesIO()
         doc = SimpleDocTemplate(
-            str(path),
+            buffer,
             pagesize=A4,
             leftMargin=0.85 * inch,
             rightMargin=0.85 * inch,
@@ -196,6 +201,7 @@ class ComplaintDocumentService:
                 story.append(Paragraph(self._escape_pdf(f"- {note}"), styles['body']))
 
         doc.build(story)
+        return buffer.getvalue()
 
     def _configure_docx_page(self, document: Any) -> None:
         """Set page margins and default font for generated DOCX files."""
@@ -214,7 +220,7 @@ class ComplaintDocumentService:
         """Create a formal subject line for the application."""
         return (
             f"Prayer for urgent action regarding {complaint.get_category_display().lower()} issue at "
-            f"{complaint.area}, {complaint.thana}"
+            f"{complaint.area}, {complaint.service_area}"
         )
 
     def _recipient_lines(self, complaint: Any) -> list[str]:
@@ -227,14 +233,14 @@ class ComplaintDocumentService:
             ]
             if profile and profile.department:
                 lines.append(profile.department)
-            lines.append(f"Authority responsible for {complaint.thana}")
+            lines.append(f"Authority responsible for {complaint.service_area}")
             lines.append('Dhaka Nagorik AI Complaint Desk')
             return lines
 
         return [
             'To',
             'Concerned Authority',
-            f'Office responsible for {complaint.thana}',
+            f'Office responsible for {complaint.service_area}',
             'Dhaka Nagorik AI Complaint Desk',
         ]
 
@@ -247,7 +253,7 @@ class ComplaintDocumentService:
 
         opening = (
             f"I, {citizen_name}, am submitting this application to formally report a "
-            f"{complaint.get_category_display().lower()}-related civic problem located at {complaint.area}, {complaint.thana}."
+            f"{complaint.get_category_display().lower()}-related civic problem located at {complaint.area}, {complaint.service_area}."
         )
         if duration:
             opening += f" According to the submitted information, the problem has persisted for {duration}."
@@ -285,7 +291,7 @@ class ComplaintDocumentService:
             ('Submitted By', complaint.citizen.get_full_name() or complaint.citizen.username),
             ('Citizen Email', complaint.citizen.email or 'Not provided'),
             ('Category', complaint.get_category_display()),
-            ('Thana', complaint.thana),
+            ('Service Area', complaint.service_area),
             ('Area / Location', complaint.area),
             ('Current Status', complaint.get_status_display()),
             ('Submission Time', complaint.created_at.strftime('%B %d, %Y %I:%M %p')),

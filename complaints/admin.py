@@ -13,16 +13,16 @@ from .models import (
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'role', 'approval_status', 'thana', 'department', 'created_at')
+    list_display = ('user', 'role', 'approval_status', 'service_area', 'department', 'created_at')
     list_filter = ('role', 'approval_status', 'created_at')
-    search_fields = ('user__email', 'thana', 'department', 'employee_id')
+    search_fields = ('user__email', 'thana', 'city_corporation', 'department', 'employee_id')
 
 
 @admin.register(Complaint)
 class ComplaintAdmin(admin.ModelAdmin):
-    list_display = ('id', 'citizen', 'category', 'thana', 'status', 'assigned_authority', 'created_at')
+    list_display = ('id', 'citizen', 'category', 'service_area', 'status', 'assigned_authority', 'created_at')
     list_filter = ('status', 'category', 'created_at')
-    search_fields = ('description', 'area', 'citizen__email')
+    search_fields = ('description', 'area', 'thana', 'city_corporation', 'citizen__email')
     readonly_fields = (
         'created_at',
         'updated_at',

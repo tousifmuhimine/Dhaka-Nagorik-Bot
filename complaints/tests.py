@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.test.utils import override_settings
 
 from .models import ChatAttachment, ChatMessage, ChatSession, Complaint, ComplaintActivity, ComplaintAttachment, ExtractedComplaint, UserProfile
+from .services.document_storage_service import DocumentStorageService
 from .services.document_service import ComplaintDocumentService
 from .services.groq_service import GroqService
 
@@ -271,12 +272,13 @@ class ComplaintDocumentServiceTests(TestCase):
             with override_settings(DOCUMENT_OUTPUT_DIR=str(temp_dir.resolve())):
                 service = ComplaintDocumentService()
                 paths = service.generate(complaint, extracted_complaint=extracted, attachments=[])
+                storage = DocumentStorageService()
 
-            self.assertTrue(Path(paths["docx_path"]).exists())
-            self.assertTrue(Path(paths["pdf_path"]).exists())
+            self.assertTrue(storage.exists(paths["docx_path"]))
+            self.assertTrue(storage.exists(paths["pdf_path"]))
             doc_text = "\n".join(
                 paragraph.text.strip()
-                for paragraph in DocxDocument(paths["docx_path"]).paragraphs
+                for paragraph in DocxDocument(storage.open_legacy_or_storage(paths["docx_path"])).paragraphs
                 if paragraph.text.strip()
             )
             self.assertIn('APPLICATION FOR CIVIC COMPLAINT RESOLUTION', doc_text)
@@ -307,6 +309,8 @@ class AccessWorkflowTests(TestCase):
         response = self.client.post(reverse('signup'), data={
             'role': 'authority',
             'first_name': 'Area Officer',
+            'city_corporation': 'DNCC',
+            'ward_number': '6',
             'thana': 'Mirpur',
             'department': 'Zone Office',
             'employee_id': 'AUTH-123',
@@ -323,7 +327,43 @@ class AccessWorkflowTests(TestCase):
         self.assertFalse(user.is_active)
         self.assertEqual(profile.role, 'authority')
         self.assertEqual(profile.approval_status, 'pending')
+        self.assertEqual(profile.city_corporation, 'DNCC')
+        self.assertEqual(profile.ward_number, 6)
         self.assertEqual(profile.thana, 'Mirpur')
+
+    def test_authority_signup_rejects_duplicate_service_ward(self):
+        self._create_user_with_profile(
+            email='existing.authority@example.com',
+            password='AuthorityPass123!',
+            role='authority',
+            first_name='Existing Authority',
+            city_corporation='DSCC',
+            ward_number=15,
+            thana='Dhanmondi',
+            department='Ward Office',
+            employee_id='AUTH-001',
+            phone_number='01710000000',
+            access_reason='Primary ward authority.',
+        )
+
+        response = self.client.post(reverse('signup'), data={
+            'role': 'authority',
+            'first_name': 'Duplicate Authority',
+            'city_corporation': 'DSCC',
+            'ward_number': '15',
+            'thana': 'Dhanmondi',
+            'department': 'Second Office',
+            'employee_id': 'AUTH-002',
+            'phone_number': '01710000001',
+            'access_reason': 'Trying to cover the same ward.',
+            'email': 'duplicate.authority@example.com',
+            'password1': 'SecurePass123!',
+            'password2': 'SecurePass123!',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'An authority account already exists or is pending for this ward.')
+        self.assertFalse(User.objects.filter(email='duplicate.authority@example.com').exists())
 
     @patch('complaints.services.complaint_submission_service.ComplaintEmailService')
     @patch('complaints.services.complaint_submission_service.ComplaintDocumentService')
@@ -343,6 +383,8 @@ class AccessWorkflowTests(TestCase):
             password='AuthorityPass123!',
             role='authority',
             first_name='Dhanmondi Authority',
+            city_corporation='DSCC',
+            ward_number=15,
             thana='Dhanmondi',
             department='Zone Office',
             employee_id='AUTH-321',
@@ -361,6 +403,8 @@ class AccessWorkflowTests(TestCase):
         image = SimpleUploadedFile('pothole.jpg', b'fake-image-content', content_type='image/jpeg')
         response = self.client.post(reverse('citizen_dashboard'), data={
             'category': 'roads',
+            'city_corporation': 'DSCC',
+            'ward_number': '15',
             'thana': 'Dhanmondi',
             'area': 'Road 27',
             'description': 'A large pothole is blocking traffic.',
@@ -370,6 +414,8 @@ class AccessWorkflowTests(TestCase):
         self.assertRedirects(response, reverse('citizen_dashboard'))
         complaint = Complaint.objects.get(citizen=citizen)
         self.assertEqual(complaint.assigned_authority, authority)
+        self.assertEqual(complaint.city_corporation, 'DSCC')
+        self.assertEqual(complaint.ward_number, 15)
         self.assertTrue(complaint.generated_docx_path.endswith('.docx'))
         self.assertTrue(complaint.generated_pdf_path.endswith('.pdf'))
         self.assertIsNotNone(complaint.email_sent_at)
@@ -402,6 +448,8 @@ class AccessWorkflowTests(TestCase):
             role='authority',
             first_name='Pending',
             approval_status='pending',
+            city_corporation='DNCC',
+            ward_number=19,
             thana='Banani',
             department='Ward Office',
             employee_id='AUTH-009',
@@ -433,6 +481,8 @@ class AccessWorkflowTests(TestCase):
             password='AuthorityPass123!',
             role='authority',
             first_name='Authority',
+            city_corporation='DNCC',
+            ward_number=1,
             thana='Uttara',
             department='Uttara Office',
             employee_id='AUTH-777',
@@ -442,6 +492,8 @@ class AccessWorkflowTests(TestCase):
         complaint = Complaint.objects.create(
             citizen=citizen,
             category='roads',
+            city_corporation='DNCC',
+            ward_number=1,
             thana='Uttara',
             area='Sector 7',
             description='Large pothole in front of the school.',
@@ -495,6 +547,8 @@ class AccessWorkflowTests(TestCase):
             password='AuthorityPass123!',
             role='authority',
             first_name='Authority',
+            city_corporation='DNCC',
+            ward_number=19,
             thana='Gulshan',
             department='Gulshan Office',
             employee_id='AUTH-555',
@@ -504,6 +558,8 @@ class AccessWorkflowTests(TestCase):
         complaint = Complaint.objects.create(
             citizen=citizen,
             category='water',
+            city_corporation='DNCC',
+            ward_number=19,
             thana='Gulshan',
             area='Road 10',
             description='Water leak is flooding the road.',

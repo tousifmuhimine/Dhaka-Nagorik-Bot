@@ -3,22 +3,24 @@
 from django.contrib.auth.models import User
 from django.utils import timezone
 
+from ..area_routing import normalize_city_corporation, normalize_text, same_service_area
 from .document_service import ComplaintDocumentService
 from .email_service import ComplaintEmailService
 
 
 def normalize_area(value):
     """Normalize area/thana strings for matching."""
-    return (value or '').strip().casefold()
+    return normalize_text(value)
 
 
-def find_area_authority(thana: str):
-    """Find the first approved authority responsible for the given thana."""
+def find_area_authority(*, city_corporation: str = '', ward_number: int | None = None, thana: str = ''):
+    """Find the approved authority responsible for the complaint service area."""
+    normalized_city = normalize_city_corporation(city_corporation)
     normalized_thana = normalize_area(thana)
-    if not normalized_thana:
+    if not (normalized_city and ward_number) and not normalized_thana:
         return None
 
-    return (
+    queryset = (
         User.objects.filter(
             is_active=True,
             userprofile__role='authority',
@@ -26,9 +28,28 @@ def find_area_authority(thana: str):
         )
         .select_related('userprofile')
         .order_by('id')
-        .filter(userprofile__thana__iexact=thana.strip())
-        .first()
     )
+
+    if normalized_city and ward_number:
+        matched = queryset.filter(
+            userprofile__city_corporation=normalized_city,
+            userprofile__ward_number=ward_number,
+        ).first()
+        if matched:
+            return matched
+
+    for authority in queryset:
+        profile = authority.userprofile
+        if same_service_area(
+            left_city_corporation=profile.city_corporation,
+            left_ward_number=profile.ward_number,
+            left_thana=profile.thana,
+            right_city_corporation=normalized_city,
+            right_ward_number=ward_number,
+            right_thana=thana,
+        ):
+            return authority
+    return None
 
 
 def assign_area_authority(complaint):
@@ -36,7 +57,11 @@ def assign_area_authority(complaint):
     if complaint.assigned_authority_id:
         return complaint.assigned_authority
 
-    authority = find_area_authority(complaint.thana)
+    authority = find_area_authority(
+        city_corporation=complaint.city_corporation,
+        ward_number=complaint.ward_number,
+        thana=complaint.thana,
+    )
     if authority:
         complaint.assigned_authority = authority
         complaint.save(update_fields=['assigned_authority', 'updated_at'])

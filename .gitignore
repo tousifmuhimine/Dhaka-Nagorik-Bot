@@ -59,6 +59,8 @@ yarn.lock
 *.md
 !README.md
 
+supabase
+
 # Old docs (deprecated - kept for reference)
 # PHASE_*.md
 # UPGRADE_*.md

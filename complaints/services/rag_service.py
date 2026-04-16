@@ -1,14 +1,19 @@
 """RAG (Retrieval-Augmented Generation) service for policy documents."""
 
 import hashlib
+import logging
+import os
 import re
 from pathlib import Path
 from typing import List, Optional
 
-import chromadb
 import numpy as np
 from PyPDF2 import PdfReader
-from sentence_transformers import SentenceTransformer
+
+from .vector_store import BaseVectorStore, build_vector_store
+
+
+logger = logging.getLogger(__name__)
 
 
 class RAGService:
@@ -16,34 +21,38 @@ class RAGService:
 
     EMBEDDING_DIMENSION = 384
 
-    def __init__(self, persist_dir: Optional[str] = None):
-        """Initialize Chroma and an embedding backend that works offline."""
-        if persist_dir:
-            self.client = chromadb.PersistentClient(path=persist_dir)
-        else:
-            self.client = chromadb.Client()
-
-        self.policy_collection = self.client.get_or_create_collection(
-            name="policy_documents",
-            metadata={"hnsw:space": "cosine"}
+    def __init__(
+        self,
+        persist_dir: Optional[str] = None,
+        *,
+        backend: Optional[str] = None,
+        vector_store: Optional[BaseVectorStore] = None,
+    ):
+        """Initialize the configured vector store and an embedding backend."""
+        self.vector_store = vector_store or build_vector_store(
+            backend=backend,
+            persist_dir=persist_dir,
         )
-        self.complaint_collection = self.client.get_or_create_collection(
-            name="complaints",
-            metadata={"hnsw:space": "cosine"}
-        )
-
+        self.policy_collection = self.vector_store.policy_collection_name
+        self.complaint_collection = self.vector_store.complaint_collection_name
         self.embedder = self._load_embedder()
-        self.policy_loaded = self.policy_collection.count() > 0
+        self.policy_loaded = self.vector_store.has_documents(self.policy_collection)
 
     def _load_embedder(self):
         """Prefer a local multilingual model, but stay usable offline."""
         try:
+            from sentence_transformers import SentenceTransformer
+
             return SentenceTransformer(
                 "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
                 local_files_only=True,
             )
         except Exception:
             return None
+
+    def _auto_index_enabled(self) -> bool:
+        """Return whether policy indexing is allowed during request handling."""
+        return os.getenv("ENABLE_AUTO_POLICY_INDEXING", "false").strip().lower() == "true"
 
     def _hash_embed(self, text: str) -> List[float]:
         """Fallback embedding for offline development environments."""
@@ -101,7 +110,7 @@ class RAGService:
         return "other"
 
     def _load_pdf_policies(self, pdf_dir: Path) -> bool:
-        """Read policy PDFs from disk and index them into Chroma."""
+        """Read policy PDFs from disk and index them into the configured store."""
         pdf_paths = sorted(pdf_dir.glob("*.pdf"))
         if not pdf_paths:
             return False
@@ -141,7 +150,8 @@ class RAGService:
         if not documents:
             return False
 
-        self.policy_collection.add(
+        self.vector_store.upsert_documents(
+            self.policy_collection,
             ids=ids,
             documents=documents,
             metadatas=metadatas,
@@ -184,7 +194,8 @@ class RAGService:
             },
         ]
 
-        self.policy_collection.add(
+        self.vector_store.upsert_documents(
+            self.policy_collection,
             ids=[policy["id"] for policy in sample_policies],
             documents=[policy["content"] for policy in sample_policies],
             metadatas=[{
@@ -196,11 +207,11 @@ class RAGService:
         )
 
     def load_policies_from_pdfs(self, pdf_dir: str = None) -> bool:
-        """Load policy documents into Chroma once per process."""
+        """Load policy documents into the configured vector store once per process."""
         if self.policy_loaded:
             return True
 
-        if self.policy_collection.count() > 0:
+        if self.vector_store.has_documents(self.policy_collection):
             self.policy_loaded = True
             return True
 
@@ -213,17 +224,36 @@ class RAGService:
         self.policy_loaded = True
         return True
 
+    def ensure_policies_available(self) -> bool:
+        """Ensure policies are present for retrieval without always indexing on-demand."""
+        if self.policy_loaded:
+            return True
+
+        if self.vector_store.has_documents(self.policy_collection):
+            self.policy_loaded = True
+            return True
+
+        if not self._auto_index_enabled():
+            logger.warning(
+                "Policy vectors are not indexed yet. Run `python manage.py index_policies` "
+                "or set ENABLE_AUTO_POLICY_INDEXING=true for local development."
+            )
+            return False
+
+        return self.load_policies_from_pdfs()
+
     def retrieve_relevant_policies(self, query: str, top_k: int = 3) -> List[dict]:
         """Retrieve policy chunks relevant to a complaint query."""
         if not query:
             return []
 
-        if not self.policy_loaded:
-            self.load_policies_from_pdfs()
+        if not self.ensure_policies_available():
+            return []
 
         query_embedding = self._embed_text(query)
-        results = self.policy_collection.query(
-            query_embeddings=[query_embedding],
+        results = self.vector_store.query(
+            self.policy_collection,
+            query_embedding=query_embedding,
             n_results=top_k,
         )
 
@@ -242,7 +272,8 @@ class RAGService:
 
     def store_complaint_summary(self, complaint_id: str, summary: str, category: str) -> None:
         """Store complaint summaries for future similarity lookup."""
-        self.complaint_collection.add(
+        self.vector_store.upsert_documents(
+            self.complaint_collection,
             ids=[complaint_id],
             documents=[summary],
             metadatas=[{"category": category}],
@@ -251,11 +282,12 @@ class RAGService:
 
     def find_similar_complaints(self, complaint_summary: str, top_k: int = 3) -> List[dict]:
         """Find previous complaint summaries similar to the current one."""
-        if not complaint_summary or self.complaint_collection.count() == 0:
+        if not complaint_summary:
             return []
 
-        results = self.complaint_collection.query(
-            query_embeddings=[self._embed_text(complaint_summary)],
+        results = self.vector_store.query(
+            self.complaint_collection,
+            query_embedding=self._embed_text(complaint_summary),
             n_results=top_k,
         )
 

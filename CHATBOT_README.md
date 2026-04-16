@@ -32,10 +32,34 @@ The **RAG Chatbot** is the core feature of your complaint system. It:
   TAVILY_API_KEY=your-api-key-here
   ```
 
-### 3. ChromaDB (Already Included)
-- Vector database for RAG
-- Runs locally, no API key needed
-- Stores Bangla policy documents
+### 3. Vector Database
+- Default local option: ChromaDB
+- Hosted option: Supabase pgvector
+- Both store policy chunks and past complaint summaries for retrieval
+
+To use Supabase instead of local Chroma:
+```env
+VECTOR_STORE_BACKEND=supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_VECTOR_TABLE=vector_documents
+SUPABASE_VECTOR_MATCH_FUNCTION=match_vector_documents
+ENABLE_AUTO_POLICY_INDEXING=false
+```
+
+Then run the SQL in `supabase/schema.sql` once inside your Supabase project.
+After that, pre-index policies before starting production traffic:
+```bash
+python manage.py index_policies
+```
+
+For file uploads and generated complaint documents, enable Supabase Storage in `.env`:
+```env
+ENABLE_SUPABASE_STORAGE=true
+SUPABASE_MEDIA_BUCKET=complaint-media
+SUPABASE_DOCUMENT_BUCKET=generated-documents
+SUPABASE_STORAGE_SIGNED_URL_TTL=3600
+```
 
 ## 📦 Architecture
 
@@ -51,7 +75,7 @@ Groq LLM (Mixtral-8x7b-32768)
     ├─ Generate conversational response
     └─ Return structured data
     ↓
-ChromaDB RAG
+Vector RAG
     ├─ Search policy for "pothole"
     ├─ Find matching policy document (Bangla)
     └─ Return relevant policy

@@ -10,8 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import logging
 import os
+import sys
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 from dotenv import load_dotenv
 
@@ -20,6 +23,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Load local development environment variables from the project root.
 load_dotenv(BASE_DIR / '.env')
+
+logger = logging.getLogger(__name__)
 
 
 # Quick-start development settings - unsuitable for production
@@ -33,6 +38,7 @@ DEBUG = True
 
 # Allow access from all hosts in development mode (for mobile access)
 ALLOWED_HOSTS = ['*']
+RUNNING_TESTS = 'test' in sys.argv
 
 
 # Application definition
@@ -80,12 +86,94 @@ WSGI_APPLICATION = 'dhaka_web.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+
+def _is_placeholder(value: str) -> bool:
+    """Return True when an env value is empty or still uses example placeholders."""
+    text = (value or "").strip()
+    if not text:
+        return True
+
+    placeholders = (
+        "your-db-password",
+        "REPLACE_WITH_SUPABASE_DB_PASSWORD",
+        "db.your-project.supabase.co",
+    )
+    return any(placeholder in text for placeholder in placeholders)
+
+
+def _postgres_database_from_url():
+    """Build Django database settings from a Postgres DATABASE_URL."""
+    database_url = (os.getenv("DATABASE_URL") or "").strip()
+    if _is_placeholder(database_url):
+        return None
+
+    parsed = urlparse(database_url)
+    if parsed.scheme not in {"postgres", "postgresql"} or not parsed.hostname:
+        return None
+
+    query = parse_qs(parsed.query)
+    sslmode = (
+        (query.get("sslmode") or [None])[-1]
+        or (os.getenv("DB_SSLMODE") or "").strip()
+        or "require"
+    )
+
+    config = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": unquote(parsed.path.lstrip("/") or os.getenv("DB_NAME", "postgres")),
+        "USER": unquote(parsed.username or os.getenv("DB_USER", "postgres")),
+        "PASSWORD": unquote(parsed.password or ""),
+        "HOST": parsed.hostname,
+        "PORT": str(parsed.port or os.getenv("DB_PORT", "5432")),
+        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "600")),
     }
-}
+    if sslmode:
+        config["OPTIONS"] = {"sslmode": sslmode}
+    return config
+
+
+def _postgres_database_from_parts():
+    """Build Django database settings from separate Postgres env vars."""
+    host = (os.getenv("DB_HOST") or "").strip()
+    password = (os.getenv("DB_PASSWORD") or "").strip()
+
+    if _is_placeholder(host) or _is_placeholder(password):
+        return None
+
+    config = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("DB_NAME", "postgres"),
+        "USER": os.getenv("DB_USER", "postgres"),
+        "PASSWORD": password,
+        "HOST": host,
+        "PORT": os.getenv("DB_PORT", "5432"),
+        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "600")),
+    }
+
+    sslmode = (os.getenv("DB_SSLMODE") or "").strip() or "require"
+    if sslmode:
+        config["OPTIONS"] = {"sslmode": sslmode}
+    return config
+
+
+def _sqlite_database():
+    """Fallback SQLite settings for local-only development."""
+    sqlite_path = os.getenv("SQLITE_PATH", str(BASE_DIR / "db.sqlite3"))
+    return {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": sqlite_path,
+    }
+
+
+POSTGRES_DATABASE = _postgres_database_from_url() or _postgres_database_from_parts()
+if POSTGRES_DATABASE:
+    DATABASES = {"default": POSTGRES_DATABASE}
+else:
+    logger.warning(
+        "Supabase Postgres credentials are incomplete or still placeholders. "
+        "Falling back to SQLite. Replace DB_PASSWORD/DATABASE_URL to enable Postgres."
+    )
+    DATABASES = {"default": _sqlite_database()}
 
 
 # Password validation
@@ -130,14 +218,54 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = Path(os.getenv('LOCAL_STORAGE_PATH', BASE_DIR / 'storage'))
 DOCUMENT_OUTPUT_DIR = Path(os.getenv('DOCUMENT_OUTPUT_DIR', str(MEDIA_ROOT / 'generated_docs')))
 POLICY_DIRECTORY = Path(os.getenv('POLICY_DIRECTORY', BASE_DIR / '_archive'))
-
-# Ensure directories exist
-MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
-DOCUMENT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+ENABLE_SUPABASE_STORAGE = os.getenv('ENABLE_SUPABASE_STORAGE', 'true').lower() == 'true'
+SUPABASE_MEDIA_BUCKET = os.getenv('SUPABASE_MEDIA_BUCKET', 'complaint-media')
+SUPABASE_DOCUMENT_BUCKET = os.getenv('SUPABASE_DOCUMENT_BUCKET', 'generated-documents')
+SUPABASE_STORAGE_SIGNED_URL_TTL = int(os.getenv('SUPABASE_STORAGE_SIGNED_URL_TTL', '3600'))
 
 ENABLE_EMAIL = os.getenv('ENABLE_EMAIL', 'false').lower() == 'true'
 ENABLE_TAVILY_SEARCH = os.getenv('ENABLE_TAVILY_SEARCH', 'false').lower() == 'true'
 ENABLE_ADVANCED_RAG = os.getenv('ENABLE_ADVANCED_RAG', 'false').lower() == 'true'
+SUPABASE_URL = os.getenv('SUPABASE_URL', '')
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY', '')
+
+USE_SUPABASE_STORAGE = bool(
+    ENABLE_SUPABASE_STORAGE
+    and not RUNNING_TESTS
+    and SUPABASE_URL
+    and SUPABASE_SERVICE_ROLE_KEY
+)
+
+if not USE_SUPABASE_STORAGE:
+    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+    DOCUMENT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+if USE_SUPABASE_STORAGE:
+    STORAGES = {
+        'default': {
+            'BACKEND': 'complaints.storage_backends.SupabaseStorage',
+            'OPTIONS': {
+                'bucket_name': SUPABASE_MEDIA_BUCKET,
+                'base_path': '',
+            },
+        },
+        'staticfiles': {
+            'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+        },
+    }
+else:
+    STORAGES = {
+        'default': {
+            'BACKEND': 'django.core.files.storage.FileSystemStorage',
+            'OPTIONS': {
+                'location': str(MEDIA_ROOT),
+                'base_url': MEDIA_URL,
+            },
+        },
+        'staticfiles': {
+            'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+        },
+    }
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.getenv('EMAIL_SMTP_HOST', 'smtp.gmail.com')

@@ -5,8 +5,8 @@
 {% block content %}
 <div class="grid gap-4 mb-8 md:grid-cols-4">
     <div class="app-surface rounded-3xl p-6">
-        <div class="app-kicker">Area</div>
-        <div class="mt-3 text-2xl font-bold text-white">{{ thana }}</div>
+        <div class="app-kicker">Service Area</div>
+        <div class="mt-3 text-2xl font-bold text-white">{{ service_area }}</div>
     </div>
     <div class="app-surface rounded-3xl p-6">
         <div class="app-kicker">Total Complaints</div>
@@ -25,8 +25,8 @@
 <div class="app-surface rounded-[2rem] p-8">
     <div class="flex flex-col gap-2 mb-6 md:flex-row md:items-end md:justify-between">
         <div>
-            <h2 class="app-panel-title text-2xl">Complaints in {{ thana }}</h2>
-            <p class="text-sm app-muted mt-1">You can only acknowledge and resolve complaints from your assigned area.</p>
+            <h2 class="app-panel-title text-2xl">Complaints in {{ service_area }}</h2>
+            <p class="text-sm app-muted mt-1">You can only acknowledge and resolve complaints from your assigned ward coverage.</p>
         </div>
         <div class="text-sm app-dim">Open complaints: {{ pending }}</div>
     </div>
@@ -57,7 +57,7 @@
                     <td class="px-4 py-3">{{ complaint.category|title }}</td>
                     <td class="px-4 py-3">
                         <div class="text-white">{{ complaint.area }}</div>
-                        <div class="text-xs app-dim">{{ complaint.thana }}</div>
+                        <div class="text-xs app-dim">{{ complaint.service_area }}</div>
                     </td>
                     <td class="px-4 py-3">
                         <span class="app-status px-2 py-1 text-xs rounded-full font-medium {% if complaint.status == 'resolved' %}app-status-resolved{% elif complaint.status == 'awaiting_citizen_confirmation' %}app-status-waiting{% elif complaint.status == 'acknowledged' %}app-status-active{% else %}app-status-default{% endif %}">
@@ -99,7 +99,7 @@
         </table>
     </div>
     {% else %}
-    <p class="app-empty rounded-2xl px-6 py-8 text-center">No complaints in this authorized area.</p>
+        <p class="app-empty rounded-2xl px-6 py-8 text-center">No complaints in this assigned service area.</p>
     {% endif %}
 </div>
 {% endblock %}

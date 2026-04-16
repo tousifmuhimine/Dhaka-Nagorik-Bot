@@ -1,12 +1,17 @@
 # Django & Web Framework
 Django==6.0.4
 python-dotenv==1.0.1
+psycopg[binary]>=3.1,<4
 
 # AI & LLM
 groq==0.10.0
-chromadb==0.5.0
-sentence-transformers==3.0.0
+supabase==2.4.5
 langchain==1.2.15
+# Optional local embedding model for higher-quality vectors
+# Uncomment if you want to generate embeddings with SentenceTransformers locally
+# sentence-transformers==3.0.0
+# Optional local vector DB fallback
+# chromadb==0.5.0
 
 # Web Search
 tavily-python==0.3.4
@@ -23,5 +28,6 @@ requests==2.31.0
 
 # Optional: Desktop app (kept for reference)
 # flet==0.25.2
-faiss-cpu==1.13.2
+# Optional local vector / similarity tooling
+# faiss-cpu==1.13.2
 numpy==1.26.4

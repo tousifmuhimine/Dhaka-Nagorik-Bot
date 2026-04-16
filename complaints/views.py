@@ -1,8 +1,6 @@
 """Views for the complaints system."""
 
-from pathlib import Path
-
-from django.conf import settings
+from io import BytesIO
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -13,9 +11,11 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from .area_routing import same_service_area, service_area_label
 from .forms import ComplaintForm, ComplaintUpdateForm, LoginForm, SignUpForm
 from .models import ChatAttachment, Complaint, ComplaintAttachment, ComplaintUpdate, UserProfile, log_complaint_activity
 from .services.complaint_submission_service import generate_documents_and_notify
+from .services.document_storage_service import DocumentStorageService
 from .services.email_service import ComplaintEmailService
 
 ALLOWED_IMAGE_TYPES = {
@@ -31,16 +31,6 @@ MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024
 def _get_profile(user):
     """Return the attached profile when available."""
     return getattr(user, 'userprofile', None)
-
-
-def _normalize_area(value):
-    """Normalize area/thana text for comparisons."""
-    return (value or '').strip().casefold()
-
-
-def _same_area(left, right):
-    """Return True when two area strings refer to the same location."""
-    return _normalize_area(left) == _normalize_area(right)
 
 
 def _is_approved_admin(user):
@@ -74,7 +64,14 @@ def _can_access_complaint(user, complaint):
         profile
         and profile.role == 'authority'
         and profile.approval_status == 'approved'
-        and _same_area(profile.thana, complaint.thana)
+        and same_service_area(
+            left_city_corporation=profile.city_corporation,
+            left_ward_number=profile.ward_number,
+            left_thana=profile.thana,
+            right_city_corporation=complaint.city_corporation,
+            right_ward_number=complaint.ward_number,
+            right_thana=complaint.thana,
+        )
     )
 
 
@@ -123,6 +120,8 @@ def signup(request):
             UserProfile.objects.create(
                 user=user,
                 role=role,
+                city_corporation=(form.cleaned_data.get('city_corporation') or '').strip(),
+                ward_number=form.cleaned_data.get('ward_number'),
                 thana=(form.cleaned_data.get('thana') or '').strip() or None,
                 department=(form.cleaned_data.get('department') or '').strip(),
                 employee_id=(form.cleaned_data.get('employee_id') or '').strip(),
@@ -280,7 +279,14 @@ def complaint_detail(request, id):
         profile
         and profile.role == 'authority'
         and profile.approval_status == 'approved'
-        and _same_area(profile.thana, complaint.thana)
+        and same_service_area(
+            left_city_corporation=profile.city_corporation,
+            left_ward_number=profile.ward_number,
+            left_thana=profile.thana,
+            right_city_corporation=complaint.city_corporation,
+            right_ward_number=complaint.ward_number,
+            right_thana=complaint.thana,
+        )
     )
     is_assigned_authority = complaint.assigned_authority_id == request.user.id
 
@@ -330,6 +336,11 @@ def complaint_detail(request, id):
 
     context = {
         'complaint': complaint,
+        'complaint_service_area': service_area_label(
+            complaint.city_corporation,
+            complaint.ward_number,
+            complaint.thana,
+        ),
         'updates': complaint.updates.select_related('updated_by').all(),
         'activities': complaint.activities.select_related('actor').all(),
         'form': form,
@@ -360,14 +371,15 @@ def download_complaint_document(request, id, fmt):
     if not target_path:
         raise Http404('Document not available')
 
-    resolved = Path(target_path).resolve()
-    allowed_root = Path(settings.DOCUMENT_OUTPUT_DIR).resolve()
-    if allowed_root not in resolved.parents:
-        raise Http404('Document path is invalid')
-    if not resolved.exists():
+    document_storage = DocumentStorageService()
+    if not document_storage.exists(target_path):
         raise Http404('Document file not found')
 
-    return FileResponse(open(resolved, 'rb'), as_attachment=True, filename=resolved.name)
+    return FileResponse(
+        BytesIO(document_storage.read_bytes(target_path)),
+        as_attachment=True,
+        filename=document_storage.filename(target_path),
+    )
 
 
 @login_required(login_url='login')
@@ -378,16 +390,23 @@ def authority_dashboard(request):
         messages.error(request, 'You do not have access to this page.')
         return redirect('home')
 
-    complaints = Complaint.objects.filter(thana__iexact=profile.thana).select_related(
+    complaints = Complaint.objects.select_related(
         'citizen',
         'assigned_authority',
     )
+    if profile.city_corporation and profile.ward_number:
+        complaints = complaints.filter(
+            city_corporation=profile.city_corporation,
+            ward_number=profile.ward_number,
+        )
+    else:
+        complaints = complaints.filter(thana__iexact=profile.thana)
     assigned = complaints.filter(assigned_authority=request.user)
 
     context = {
         'complaints': complaints,
         'assigned': assigned,
-        'thana': profile.thana,
+        'service_area': service_area_label(profile.city_corporation, profile.ward_number, profile.thana),
         'total': complaints.count(),
         'pending': complaints.exclude(status='resolved').count(),
         'awaiting_confirmation': complaints.filter(status='awaiting_citizen_confirmation').count(),
@@ -408,13 +427,17 @@ def admin_dashboard(request):
 
     search = request.GET.get('search', '').strip()
     if search:
-        complaints = complaints.filter(
+        complaint_filters = (
             Q(description__icontains=search)
             | Q(area__icontains=search)
             | Q(thana__icontains=search)
+            | Q(city_corporation__icontains=search)
             | Q(citizen__first_name__icontains=search)
             | Q(citizen__email__icontains=search)
         )
+        if search.isdigit():
+            complaint_filters |= Q(ward_number=int(search))
+        complaints = complaints.filter(complaint_filters)
 
     status = request.GET.get('status', '').strip()
     if status:
@@ -452,6 +475,20 @@ def approve_access_request(request, profile_id):
     if profile.role == 'citizen':
         messages.error(request, 'Citizen accounts do not require approval.')
         return redirect('admin_dashboard')
+
+    if profile.role == 'authority' and profile.city_corporation and profile.ward_number:
+        duplicate_approved = UserProfile.objects.filter(
+            role='authority',
+            approval_status='approved',
+            city_corporation=profile.city_corporation,
+            ward_number=profile.ward_number,
+        ).exclude(id=profile.id)
+        if duplicate_approved.exists():
+            messages.error(
+                request,
+                f'Another approved authority already covers {profile.service_area}. Reject or reassign this request first.',
+            )
+            return redirect('admin_dashboard')
 
     profile.approval_status = 'approved'
     profile.approved_by = request.user
@@ -502,7 +539,14 @@ def acknowledge_complaint(request, id):
         profile
         and profile.role == 'authority'
         and profile.approval_status == 'approved'
-        and _same_area(profile.thana, complaint.thana)
+        and same_service_area(
+            left_city_corporation=profile.city_corporation,
+            left_ward_number=profile.ward_number,
+            left_thana=profile.thana,
+            right_city_corporation=complaint.city_corporation,
+            right_ward_number=complaint.ward_number,
+            right_thana=complaint.thana,
+        )
     ):
         messages.error(request, 'You do not have access to acknowledge this complaint.')
         return redirect('home')
@@ -519,7 +563,7 @@ def acknowledge_complaint(request, id):
         complaint,
         'acknowledged',
         actor=request.user,
-        message=f'Acknowledged for {complaint.thana}.',
+        message=f'Acknowledged for {complaint.service_area}.',
     )
 
     messages.success(request, 'Complaint acknowledged successfully.')

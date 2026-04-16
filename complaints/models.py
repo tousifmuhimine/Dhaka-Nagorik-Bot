@@ -3,7 +3,11 @@
 import os
 
 from django.contrib.auth.models import User
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Q
+
+from .area_routing import CITY_CORPORATION_CHOICES, service_area_label
 
 
 def chat_attachment_upload_to(instance, filename):
@@ -34,6 +38,12 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='citizen')
     thana = models.CharField(max_length=100, blank=True, null=True)  # For authority users
+    city_corporation = models.CharField(max_length=10, choices=CITY_CORPORATION_CHOICES, blank=True)
+    ward_number = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(75)],
+    )
     department = models.CharField(max_length=150, blank=True)
     employee_id = models.CharField(max_length=100, blank=True)
     phone_number = models.CharField(max_length=30, blank=True)
@@ -56,8 +66,26 @@ class UserProfile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['city_corporation', 'ward_number'],
+                condition=Q(
+                    role='authority',
+                    approval_status='approved',
+                    ward_number__isnull=False,
+                ) & ~Q(city_corporation=''),
+                name='unique_approved_authority_per_service_ward',
+            ),
+        ]
+
     def __str__(self):
         return f"{self.user.email} - {self.role}"
+
+    @property
+    def service_area(self) -> str:
+        """Return a human-readable service area label."""
+        return service_area_label(self.city_corporation, self.ward_number, self.thana or '')
 
 
 class Complaint(models.Model):
@@ -84,6 +112,12 @@ class Complaint(models.Model):
 
     citizen = models.ForeignKey(User, on_delete=models.CASCADE, related_name='complaints')
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    city_corporation = models.CharField(max_length=10, choices=CITY_CORPORATION_CHOICES, blank=True)
+    ward_number = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(75)],
+    )
     thana = models.CharField(max_length=100)
     area = models.CharField(max_length=200)
     description = models.TextField()
@@ -113,6 +147,11 @@ class Complaint(models.Model):
 
     def __str__(self):
         return f"Complaint #{self.id} - {self.category} ({self.status})"
+
+    @property
+    def service_area(self) -> str:
+        """Return a human-readable routing label for the complaint."""
+        return service_area_label(self.city_corporation, self.ward_number, self.thana)
 
 
 class ComplaintUpdate(models.Model):
