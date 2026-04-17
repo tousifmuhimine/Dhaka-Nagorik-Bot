@@ -77,6 +77,7 @@ DEBUG = _env_bool("DEBUG", default=not IS_PRODUCTION)
 default_allowed_hosts = ["*"] if not IS_PRODUCTION else []
 if RAILWAY_ENVIRONMENT:
     default_allowed_hosts.append(".up.railway.app")
+    default_allowed_hosts.append("healthcheck.railway.app")
 if RAILWAY_PUBLIC_DOMAIN:
     default_allowed_hosts.append(RAILWAY_PUBLIC_DOMAIN)
 
