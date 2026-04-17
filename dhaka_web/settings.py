@@ -78,7 +78,18 @@ default_allowed_hosts = ["*"] if not IS_PRODUCTION else []
 if RAILWAY_PUBLIC_DOMAIN:
     default_allowed_hosts.append(RAILWAY_PUBLIC_DOMAIN)
 
-ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", default=default_allowed_hosts)
+# Get ALLOWED_HOSTS from env, but filter out literal Railway variable references
+allowed_hosts_raw = _env_list("ALLOWED_HOSTS", default=default_allowed_hosts)
+ALLOWED_HOSTS = [
+    h for h in allowed_hosts_raw
+    if h and not h.startswith("${{") and not h.endswith("}}")
+]
+
+# If no valid hosts after filtering, use defaults
+if not ALLOWED_HOSTS:
+    ALLOWED_HOSTS = default_allowed_hosts
+
+# Validate production has at least one real host
 if IS_PRODUCTION and not ALLOWED_HOSTS:
     raise ImproperlyConfigured("Set ALLOWED_HOSTS to your Railway domain or custom domain.")
 
