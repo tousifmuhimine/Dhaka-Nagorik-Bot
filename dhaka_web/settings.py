@@ -75,6 +75,8 @@ if IS_PRODUCTION and SECRET_KEY.startswith("django-insecure-"):
 DEBUG = _env_bool("DEBUG", default=not IS_PRODUCTION)
 
 default_allowed_hosts = ["*"] if not IS_PRODUCTION else []
+if RAILWAY_ENVIRONMENT:
+    default_allowed_hosts.append(".up.railway.app")
 if RAILWAY_PUBLIC_DOMAIN:
     default_allowed_hosts.append(RAILWAY_PUBLIC_DOMAIN)
 
@@ -82,7 +84,7 @@ if RAILWAY_PUBLIC_DOMAIN:
 allowed_hosts_raw = _env_list("ALLOWED_HOSTS", default=default_allowed_hosts)
 ALLOWED_HOSTS = [
     h for h in allowed_hosts_raw
-    if h and not h.startswith("${{") and not h.endswith("}}")
+    if h and not (h.startswith("${{") and h.endswith("}}"))
 ]
 
 # If no valid hosts after filtering, use defaults
@@ -94,6 +96,8 @@ if IS_PRODUCTION and not ALLOWED_HOSTS:
     raise ImproperlyConfigured("Set ALLOWED_HOSTS to your Railway domain or custom domain.")
 
 CSRF_TRUSTED_ORIGINS = _env_list("CSRF_TRUSTED_ORIGINS")
+if RAILWAY_ENVIRONMENT and "https://*.up.railway.app" not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS.append("https://*.up.railway.app")
 if RAILWAY_PUBLIC_DOMAIN:
     railway_origin = f"https://{RAILWAY_PUBLIC_DOMAIN}"
     if railway_origin not in CSRF_TRUSTED_ORIGINS:
