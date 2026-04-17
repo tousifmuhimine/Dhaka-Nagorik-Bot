@@ -17,9 +17,16 @@ Including another URLconf
 from django.contrib import admin
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import JsonResponse
 from django.urls import path, include
 
+
+def healthz(_request):
+    """Tiny deployment health check that avoids database and external services."""
+    return JsonResponse({"status": "ok"})
+
 urlpatterns = [
+    path('healthz/', healthz, name='healthz'),
     path('admin/', admin.site.urls),
     path('', include('complaints.urls')),
 ]
