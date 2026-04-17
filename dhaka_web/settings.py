@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,20 +26,71 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
 logger = logging.getLogger(__name__)
+RUNNING_TESTS = 'test' in sys.argv
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    """Read a boolean environment variable."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _env_list(name: str, default=None) -> list[str]:
+    """Read comma-separated environment values."""
+    value = os.getenv(name)
+    if not value:
+        return list(default or [])
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+APP_ENV = (os.getenv("APP_ENV") or "development").strip().lower()
+RAILWAY_ENVIRONMENT = (os.getenv("RAILWAY_ENVIRONMENT") or "").strip().lower()
+RAILWAY_PUBLIC_DOMAIN = (os.getenv("RAILWAY_PUBLIC_DOMAIN") or "").strip()
+IS_PRODUCTION = bool(
+    APP_ENV in {"production", "prod"}
+    or RAILWAY_ENVIRONMENT in {"production", "prod"}
+    or RAILWAY_PUBLIC_DOMAIN
+)
+
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-*k-l=czgoag7g@z_b^_8z#i9k*zbsre67gw&f(!9!4*m$phroj'
+SECRET_KEY = os.getenv(
+    "SECRET_KEY",
+    "django-insecure-*k-l=czgoag7g@z_b^_8z#i9k*zbsre67gw&f(!9!4*m$phroj",
+)
+if IS_PRODUCTION and SECRET_KEY.startswith("django-insecure-"):
+    raise ImproperlyConfigured("Set SECRET_KEY in Railway before deploying.")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = _env_bool("DEBUG", default=not IS_PRODUCTION)
 
-# Allow access from all hosts in development mode (for mobile access)
-ALLOWED_HOSTS = ['*']
-RUNNING_TESTS = 'test' in sys.argv
+default_allowed_hosts = ["*"] if not IS_PRODUCTION else []
+if RAILWAY_PUBLIC_DOMAIN:
+    default_allowed_hosts.append(RAILWAY_PUBLIC_DOMAIN)
+
+ALLOWED_HOSTS = _env_list("ALLOWED_HOSTS", default=default_allowed_hosts)
+if IS_PRODUCTION and not ALLOWED_HOSTS:
+    raise ImproperlyConfigured("Set ALLOWED_HOSTS to your Railway domain or custom domain.")
+
+CSRF_TRUSTED_ORIGINS = _env_list("CSRF_TRUSTED_ORIGINS")
+if RAILWAY_PUBLIC_DOMAIN:
+    railway_origin = f"https://{RAILWAY_PUBLIC_DOMAIN}"
+    if railway_origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(railway_origin)
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", default=not DEBUG)
+SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", default=not DEBUG)
 
 
 # Application definition
@@ -102,8 +154,16 @@ def _is_placeholder(value: str) -> bool:
 
 
 def _postgres_database_from_url():
-    """Build Django database settings from a Postgres DATABASE_URL."""
-    database_url = (os.getenv("DATABASE_URL") or "").strip()
+    """Build Django database settings from a Supabase Postgres URL."""
+    database_url = ""
+    for env_name in (
+        "SUPABASE_DATABASE_URL",
+        "DATABASE_URL",
+    ):
+        database_url = (os.getenv(env_name) or "").strip()
+        if not _is_placeholder(database_url):
+            break
+
     if _is_placeholder(database_url):
         return None
 
@@ -133,7 +193,7 @@ def _postgres_database_from_url():
 
 
 def _postgres_database_from_parts():
-    """Build Django database settings from separate Postgres env vars."""
+    """Build Django database settings from separate Supabase Postgres env vars."""
     host = (os.getenv("DB_HOST") or "").strip()
     password = (os.getenv("DB_PASSWORD") or "").strip()
 
@@ -168,10 +228,15 @@ def _sqlite_database():
 POSTGRES_DATABASE = _postgres_database_from_url() or _postgres_database_from_parts()
 if POSTGRES_DATABASE:
     DATABASES = {"default": POSTGRES_DATABASE}
+elif not _env_bool("ALLOW_SQLITE_FALLBACK", default=False):
+    raise ImproperlyConfigured(
+        "Supabase Postgres is required, but no usable database settings were found. "
+        "Set SUPABASE_DATABASE_URL, DATABASE_URL, or DB_HOST/DB_PASSWORD."
+    )
 else:
     logger.warning(
         "Supabase Postgres credentials are incomplete or still placeholders. "
-        "Falling back to SQLite. Replace DB_PASSWORD/DATABASE_URL to enable Postgres."
+        "Using SQLite only because ALLOW_SQLITE_FALLBACK=true."
     )
     DATABASES = {"default": _sqlite_database()}
 
