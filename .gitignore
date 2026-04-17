@@ -61,6 +61,9 @@ yarn.lock
 
 supabase
 
+FULL_PROJECT_REPORT.docx
+convert_to_docx.py
+
 # Old docs (deprecated - kept for reference)
 # PHASE_*.md
 # UPGRADE_*.md
