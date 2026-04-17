@@ -1,7 +1,7 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "deploy": {
-    "startCommand": "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn dhaka_web.wsgi:application --bind 0.0.0.0:$PORT --access-logfile - --error-logfile - --capture-output --log-level info --timeout 120",
+    "startCommand": "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn dhaka_web.wsgi:application --bind [::]:$PORT --access-logfile - --error-logfile - --capture-output --log-level info --timeout 120",
     "healthcheckPath": "/healthz/",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
