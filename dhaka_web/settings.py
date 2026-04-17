@@ -89,9 +89,6 @@ ALLOWED_HOSTS = [
 if not ALLOWED_HOSTS:
     ALLOWED_HOSTS = default_allowed_hosts
 
-# Validate production has at least one real host
-if IS_PRODUCTION and not ALLOWED_HOSTS:
-    raise ImproperlyConfigured("Set ALLOWED_HOSTS to your Railway domain or custom domain.")
 
 CSRF_TRUSTED_ORIGINS = _env_list("CSRF_TRUSTED_ORIGINS")
 if RAILWAY_PUBLIC_DOMAIN:
