@@ -26,6 +26,10 @@ db.sqlite3-journal
 .env.local
 .env.*.local
 
+# Keep committed env templates
+!.env.example
+!**/.env.example
+
 # IDE
 .vscode/
 .idea/
@@ -52,14 +56,22 @@ htmlcov/
 
 # Dependencies
 node_modules/
-package-lock.json
-yarn.lock
 
-# Markdown files (except README)
-*.md
-!README.md
-
-supabase
+# Frontend (Next.js)
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/coverage/
+frontend/.vercel/
+frontend/.pnp
+frontend/.pnp.*
+frontend/.yarn/
+frontend/.pnpm-debug.log*
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
 
 FULL_PROJECT_REPORT.docx
 convert_to_docx.py
